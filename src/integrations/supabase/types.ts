@@ -14,16 +14,419 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_approval_requests: {
+        Row: {
+          acted_at: string | null
+          acted_by: string | null
+          admin_user_id: string
+          id: string
+          payload: Json | null
+          requested_action: string
+          requested_at: string | null
+          status: string | null
+          target_id: string
+          target_table: string
+        }
+        Insert: {
+          acted_at?: string | null
+          acted_by?: string | null
+          admin_user_id: string
+          id?: string
+          payload?: Json | null
+          requested_action: string
+          requested_at?: string | null
+          status?: string | null
+          target_id: string
+          target_table: string
+        }
+        Update: {
+          acted_at?: string | null
+          acted_by?: string | null
+          admin_user_id?: string
+          id?: string
+          payload?: Json | null
+          requested_action?: string
+          requested_at?: string | null
+          status?: string | null
+          target_id?: string
+          target_table?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_approval_requests_acted_by_fkey"
+            columns: ["acted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_approval_requests_admin_user_id_fkey"
+            columns: ["admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          diff: Json | null
+          id: string
+          record_id: string
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          diff?: Json | null
+          id?: string
+          record_id: string
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          diff?: Json | null
+          id?: string
+          record_id?: string
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address: string | null
+          area: string | null
+          created_at: string | null
+          customer_name: string
+          email: string | null
+          id: string
+          phone: string | null
+          user_id: string | null
+        }
+        Insert: {
+          address?: string | null
+          area?: string | null
+          created_at?: string | null
+          customer_name: string
+          email?: string | null
+          id?: string
+          phone?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          address?: string | null
+          area?: string | null
+          created_at?: string | null
+          customer_name?: string
+          email?: string | null
+          id?: string
+          phone?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deliveries: {
+        Row: {
+          created_at: string | null
+          created_by_user: string
+          customer_id: string
+          delivery_date: string
+          delivery_status: string | null
+          id: string
+          qty: number
+          total_amount: number
+          unit_rate: number
+        }
+        Insert: {
+          created_at?: string | null
+          created_by_user: string
+          customer_id: string
+          delivery_date: string
+          delivery_status?: string | null
+          id?: string
+          qty: number
+          total_amount: number
+          unit_rate: number
+        }
+        Update: {
+          created_at?: string | null
+          created_by_user?: string
+          customer_id?: string
+          delivery_date?: string
+          delivery_status?: string | null
+          id?: string
+          qty?: number
+          total_amount?: number
+          unit_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deliveries_created_by_user_fkey"
+            columns: ["created_by_user"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_items: {
+        Row: {
+          delivery_id: string
+          id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          total_price: number
+          unit_price: number
+        }
+        Insert: {
+          delivery_id: string
+          id?: string
+          product_id: string
+          product_name: string
+          quantity: number
+          total_price: number
+          unit_price: number
+        }
+        Update: {
+          delivery_id?: string
+          id?: string
+          product_id?: string
+          product_name?: string
+          quantity?: number
+          total_price?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_items_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications_log: {
+        Row: {
+          channel: string
+          content: string
+          created_at: string | null
+          id: string
+          provider_ref: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          channel: string
+          content: string
+          created_at?: string | null
+          id?: string
+          provider_ref?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          provider_ref?: string | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string | null
+          customer_id: string
+          delivery_id: string | null
+          due_date: string
+          id: string
+          mpesa_code: string | null
+          payment_method: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          customer_id: string
+          delivery_id?: string | null
+          due_date: string
+          id?: string
+          mpesa_code?: string | null
+          payment_method?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          customer_id?: string
+          delivery_id?: string | null
+          due_date?: string
+          id?: string
+          mpesa_code?: string | null
+          payment_method?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          unit_price: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          unit_price: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          unit_price?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: []
+      }
+      users: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          phone: string | null
+          role_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          name: string
+          phone?: string | null
+          role_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          role_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "users_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "user_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { user_uuid: string }
+        Returns: string
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "MasterAdmin" | "Admin" | "Customer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +553,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["MasterAdmin", "Admin", "Customer"],
+    },
   },
 } as const
