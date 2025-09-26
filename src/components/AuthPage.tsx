@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, Mail, Lock, User, Phone } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
 import kempLogo from "@/assets/kemp-logo.png";
 
 interface AuthPageProps {
@@ -13,6 +15,7 @@ interface AuthPageProps {
 }
 
 const AuthPage = ({ onBack }: AuthPageProps) => {
+  const { signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState({
@@ -26,15 +29,71 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Placeholder for authentication logic
-    setTimeout(() => setIsLoading(false), 1000);
+    
+    try {
+      const { error } = await signIn(loginForm.email, loginForm.password);
+      
+      if (error) {
+        toast({
+          title: "Login Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: "You have been successfully logged in.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Login Failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (registerForm.password !== registerForm.confirmPassword) {
+      toast({
+        title: "Password Mismatch",
+        description: "Passwords do not match. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsLoading(true);
-    // Placeholder for registration logic
-    setTimeout(() => setIsLoading(false), 1000);
+    
+    try {
+      const { error } = await signUp(registerForm.email, registerForm.password, registerForm.name);
+      
+      if (error) {
+        toast({
+          title: "Registration Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Registration Successful!",
+          description: "Please check your email to verify your account.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Registration Failed", 
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -103,11 +162,6 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
                     </div>
                   </div>
 
-                  <Alert className="border-destructive/20 bg-destructive/5">
-                    <AlertDescription className="text-destructive">
-                      Authentication requires Supabase integration. Please connect your project to Supabase to enable login functionality.
-                    </AlertDescription>
-                  </Alert>
 
                   <Button 
                     type="submit" 
@@ -201,11 +255,6 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
                     </div>
                   </div>
 
-                  <Alert className="border-destructive/20 bg-destructive/5">
-                    <AlertDescription className="text-destructive">
-                      Registration requires Supabase integration. Please connect your project to Supabase to enable user registration.
-                    </AlertDescription>
-                  </Alert>
 
                   <Button 
                     type="submit" 
