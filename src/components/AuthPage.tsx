@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, Mail, Lock, User, Phone } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import kempLogo from "@/assets/kemp-logo.png";
 
 interface AuthPageProps {
@@ -17,6 +18,7 @@ interface AuthPageProps {
 const AuthPage = ({ onBack }: AuthPageProps) => {
   const { signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState({
     name: "",
@@ -48,6 +50,49 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
     } catch (error) {
       toast({
         title: "Login Failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!loginForm.email) {
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+      
+      if (error) {
+        toast({
+          title: "Reset Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Reset Email Sent!",
+          description: "Check your email for password reset instructions.",
+        });
+        setShowForgotPassword(false);
+      }
+    } catch (error) {
+      toast({
+        title: "Reset Failed",
         description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
@@ -170,6 +215,41 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
                   >
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>
+
+                  <div className="text-center mt-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setShowForgotPassword(true)}
+                      className="text-sm text-muted-foreground hover:text-primary"
+                    >
+                      Forgot your password?
+                    </Button>
+                  </div>
+
+                  {showForgotPassword && (
+                    <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Enter your email address to receive a password reset link.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleForgotPassword}
+                          disabled={isLoading}
+                          size="sm"
+                        >
+                          {isLoading ? "Sending..." : "Send Reset Link"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowForgotPassword(false)}
+                          size="sm"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </form>
               </TabsContent>
 
