@@ -54,14 +54,14 @@ const Index = () => {
   }
 
   // If user is authenticated, show role-based dashboard
-  if (user && userRole) {
-    switch (userRole) {
+  if (user) {
+    const role = userRole || 'Customer';
+    switch (role) {
       case 'MasterAdmin':
         return <MasterAdminDashboard onLogout={handleLogout} />;
       case 'Admin':
         return <AdminDashboard onLogout={handleLogout} />;
       case 'Customer':
-        return <CustomerDashboard onLogout={handleLogout} />;
       default:
         return <CustomerDashboard onLogout={handleLogout} />;
     }

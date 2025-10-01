@@ -31,14 +31,20 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
+    const email = loginForm.email.trim();
+    const password = loginForm.password;
     
     try {
-      const { error } = await signIn(loginForm.email, loginForm.password);
+      const { error } = await signIn(email, password);
       
       if (error) {
+        const friendly = /Invalid login credentials/i.test(error.message)
+          ? "Invalid email or password. If you just signed up, please verify your email first or reset your password."
+          : error.message || "Login failed. Please try again.";
         toast({
           title: "Login Failed",
-          description: error.message,
+          description: friendly,
           variant: "destructive",
         });
       } else {
@@ -61,7 +67,8 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!loginForm.email) {
+    const email = loginForm.email.trim();
+    if (!email) {
       toast({
         title: "Email Required",
         description: "Please enter your email address first.",
@@ -73,7 +80,7 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
     setIsLoading(true);
     
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/reset-password`,
       });
       
@@ -116,7 +123,7 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
     setIsLoading(true);
     
     try {
-      const { error } = await signUp(registerForm.email, registerForm.password, registerForm.name);
+      const { error } = await signUp(registerForm.email.trim(), registerForm.password, registerForm.name.trim());
       
       if (error) {
         toast({
