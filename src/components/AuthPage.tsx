@@ -19,6 +19,7 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
   const { signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showMagicLink, setShowMagicLink] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState({
     name: "",
@@ -56,6 +57,95 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
     } catch (error) {
       toast({
         title: "Login Failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const email = loginForm.email.trim();
+    if (!email) {
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+      
+      if (error) {
+        toast({
+          title: "Failed to Send Magic Link",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Magic Link Sent!",
+          description: "Check your email for a one-tap sign-in link.",
+        });
+        setShowMagicLink(false);
+      }
+    } catch (error) {
+      toast({
+        title: "Failed to Send Magic Link",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    const email = loginForm.email.trim();
+    if (!email) {
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+      });
+      
+      if (error) {
+        toast({
+          title: "Failed to Resend",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Confirmation Email Sent!",
+          description: "Check your inbox for the confirmation email.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Failed to Resend",
         description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
@@ -223,16 +313,69 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>
 
-                  <div className="text-center mt-4">
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-muted"></div>
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">or</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowMagicLink(true)}
+                    disabled={isLoading}
+                    className="w-full"
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    Sign in with Magic Link
+                  </Button>
+
+                  <div className="flex gap-2 mt-4">
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={() => setShowForgotPassword(true)}
-                      className="text-sm text-muted-foreground hover:text-primary"
+                      className="text-sm text-muted-foreground hover:text-primary flex-1"
                     >
-                      Forgot your password?
+                      Forgot password?
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={handleResendConfirmation}
+                      disabled={isLoading}
+                      className="text-sm text-muted-foreground hover:text-primary flex-1"
+                    >
+                      Resend confirmation
                     </Button>
                   </div>
+
+                  {showMagicLink && (
+                    <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        We'll send you a one-tap sign-in link to your email. No password needed!
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleMagicLink}
+                          disabled={isLoading}
+                          size="sm"
+                        >
+                          {isLoading ? "Sending..." : "Send Magic Link"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowMagicLink(false)}
+                          size="sm"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   {showForgotPassword && (
                     <div className="mt-4 p-4 border rounded-lg bg-muted/50">
@@ -261,6 +404,11 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
               </TabsContent>
 
               <TabsContent value="register">
+                <Alert className="mb-4">
+                  <AlertDescription className="text-sm">
+                    After signing up, use "Forgot your password?" to set your password if you can't log in immediately.
+                  </AlertDescription>
+                </Alert>
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
