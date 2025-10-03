@@ -38,6 +38,37 @@ export function ProductsSection() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const { error } = await supabase
+        .from("products")
+        .update({
+          name: data.name,
+          description: data.description,
+          unit_price: parseFloat(data.unit_price),
+        })
+        .eq("id", data.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast({
+        title: "Product updated",
+        description: "Product has been updated successfully.",
+      });
+      setIsFormOpen(false);
+      setEditingProduct(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to update product: " + error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase

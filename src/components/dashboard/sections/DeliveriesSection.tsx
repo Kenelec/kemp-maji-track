@@ -35,7 +35,9 @@ export function DeliveriesSection() {
     switch (status) {
       case "scheduled":
         return "bg-blue-500/10 text-blue-500";
-      case "completed":
+      case "dispatched":
+        return "bg-yellow-500/10 text-yellow-500";
+      case "delivered":
         return "bg-green-500/10 text-green-500";
       case "cancelled":
         return "bg-red-500/10 text-red-500";
