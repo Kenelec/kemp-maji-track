@@ -43,7 +43,7 @@ const deliverySchema = z.object({
   }),
   qty: z.string().min(1, "Quantity is required"),
   unit_rate: z.string().min(1, "Unit rate is required"),
-  delivery_status: z.string().default("scheduled"),
+  delivery_status: z.string().default("delivered"),
 });
 
 type DeliveryFormData = z.infer<typeof deliverySchema>;
@@ -51,9 +51,10 @@ type DeliveryFormData = z.infer<typeof deliverySchema>;
 interface DeliveryFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editData?: any;
 }
 
-export function DeliveryFormDialog({ open, onOpenChange }: DeliveryFormDialogProps) {
+export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFormDialogProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -64,7 +65,7 @@ export function DeliveryFormDialog({ open, onOpenChange }: DeliveryFormDialogPro
       customer_id: "",
       qty: "",
       unit_rate: "",
-      delivery_status: "scheduled",
+      delivery_status: "delivered",
     },
   });
 
@@ -81,31 +82,68 @@ export function DeliveryFormDialog({ open, onOpenChange }: DeliveryFormDialogPro
     },
   });
 
+  useEffect(() => {
+    if (editData && open) {
+      form.reset({
+        customer_id: editData.customer_id,
+        delivery_date: new Date(editData.delivery_date),
+        qty: editData.qty.toString(),
+        unit_rate: editData.unit_rate.toString(),
+        delivery_status: editData.delivery_status,
+      });
+    } else if (!open) {
+      form.reset({
+        customer_id: "",
+        qty: "",
+        unit_rate: "",
+        delivery_status: "delivered",
+      });
+    }
+  }, [editData, open, form]);
+
   const mutation = useMutation({
     mutationFn: async (data: DeliveryFormData) => {
       const qty = parseInt(data.qty);
       const unit_rate = parseFloat(data.unit_rate);
       const total_amount = qty * unit_rate;
 
-      const { error } = await supabase
-        .from("deliveries")
-        .insert([{
-          customer_id: data.customer_id,
-          delivery_date: format(data.delivery_date, "yyyy-MM-dd"),
-          qty,
-          unit_rate,
-          total_amount,
-          delivery_status: data.delivery_status,
-          created_by_user: user?.id,
-        }]);
-      
-      if (error) throw error;
+      if (editData) {
+        const { error } = await supabase
+          .from("deliveries")
+          .update({
+            customer_id: data.customer_id,
+            delivery_date: format(data.delivery_date, "yyyy-MM-dd"),
+            qty,
+            unit_rate,
+            total_amount,
+            delivery_status: data.delivery_status,
+          })
+          .eq("id", editData.id);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("deliveries")
+          .insert([{
+            customer_id: data.customer_id,
+            delivery_date: format(data.delivery_date, "yyyy-MM-dd"),
+            qty,
+            unit_rate,
+            total_amount,
+            delivery_status: data.delivery_status,
+            created_by_user: user?.id,
+          }]);
+        
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       toast({
-        title: "Delivery created",
-        description: "New delivery has been scheduled successfully.",
+        title: editData ? "Delivery updated" : "Delivery created",
+        description: editData 
+          ? "Delivery has been updated successfully."
+          : "New delivery has been scheduled successfully.",
       });
       onOpenChange(false);
       form.reset();
@@ -113,7 +151,7 @@ export function DeliveryFormDialog({ open, onOpenChange }: DeliveryFormDialogPro
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to create delivery: " + error.message,
+        description: `Failed to ${editData ? "update" : "create"} delivery: ` + error.message,
         variant: "destructive",
       });
     },
@@ -127,8 +165,10 @@ export function DeliveryFormDialog({ open, onOpenChange }: DeliveryFormDialogPro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New Delivery</DialogTitle>
-          <DialogDescription>Schedule a new water delivery</DialogDescription>
+          <DialogTitle>{editData ? "Edit Delivery" : "New Delivery"}</DialogTitle>
+          <DialogDescription>
+            {editData ? "Update delivery information" : "Schedule a new water delivery"}
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -234,8 +274,6 @@ export function DeliveryFormDialog({ open, onOpenChange }: DeliveryFormDialogPro
                       </SelectTrigger>
                     </FormControl>
             <SelectContent>
-              <SelectItem value="scheduled">Scheduled</SelectItem>
-              <SelectItem value="dispatched">Dispatched</SelectItem>
               <SelectItem value="delivered">Delivered</SelectItem>
               <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
@@ -249,7 +287,9 @@ export function DeliveryFormDialog({ open, onOpenChange }: DeliveryFormDialogPro
                 Cancel
               </Button>
               <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? "Creating..." : "Create Delivery"}
+                {mutation.isPending 
+                  ? (editData ? "Updating..." : "Creating...") 
+                  : (editData ? "Update Delivery" : "Create Delivery")}
               </Button>
             </div>
           </form>

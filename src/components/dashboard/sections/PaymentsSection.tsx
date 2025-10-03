@@ -5,15 +5,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle } from "lucide-react";
+import { Plus, CheckCircle, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentFormDialog } from "../forms/PaymentFormDialog";
 import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function PaymentsSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
 
   const { data: payments, isLoading } = useQuery({
     queryKey: ["payments"],
@@ -30,6 +43,48 @@ export function PaymentsSection() {
       return data;
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("payments")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      toast({
+        title: "Payment deleted",
+        description: "Payment has been removed successfully.",
+      });
+      setDeleteDialogOpen(false);
+      setPaymentToDelete(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to delete payment: " + error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEdit = (payment: any) => {
+    setEditingPayment(payment);
+    setIsFormOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setPaymentToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (paymentToDelete) {
+      deleteMutation.mutate(paymentToDelete);
+    }
+  };
 
   const updatePaymentStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -123,16 +178,24 @@ export function PaymentsSection() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {payment.status === "pending" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => updatePaymentStatus.mutate({ id: payment.id, status: "paid" })}
-                        >
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          Mark Paid
+                      <div className="flex justify-end gap-2">
+                        {payment.status === "pending" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => updatePaymentStatus.mutate({ id: payment.id, status: "paid" })}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Mark Paid
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
+                          <Pencil className="w-4 h-4" />
                         </Button>
-                      )}
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -144,8 +207,29 @@ export function PaymentsSection() {
 
       <PaymentFormDialog
         open={isFormOpen}
-        onOpenChange={setIsFormOpen}
+        onOpenChange={(open) => {
+          setIsFormOpen(open);
+          if (!open) setEditingPayment(null);
+        }}
+        editData={editingPayment}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Payment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this payment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

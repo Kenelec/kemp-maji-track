@@ -43,7 +43,7 @@ const paymentSchema = z.object({
   }),
   payment_method: z.string().default("cash"),
   mpesa_code: z.string().optional(),
-  status: z.string().default("pending"),
+  status: z.string().default("paid"),
 });
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
@@ -51,9 +51,10 @@ type PaymentFormData = z.infer<typeof paymentSchema>;
 interface PaymentFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editData?: any;
 }
 
-export function PaymentFormDialog({ open, onOpenChange }: PaymentFormDialogProps) {
+export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -64,11 +65,32 @@ export function PaymentFormDialog({ open, onOpenChange }: PaymentFormDialogProps
       amount: "",
       payment_method: "cash",
       mpesa_code: "",
-      status: "pending",
+      status: "paid",
     },
   });
 
   const paymentMethod = form.watch("payment_method");
+
+  useEffect(() => {
+    if (editData && open) {
+      form.reset({
+        customer_id: editData.customer_id,
+        amount: editData.amount.toString(),
+        due_date: new Date(editData.due_date),
+        payment_method: editData.payment_method,
+        mpesa_code: editData.mpesa_code || "",
+        status: editData.status,
+      });
+    } else if (!open) {
+      form.reset({
+        customer_id: "",
+        amount: "",
+        payment_method: "cash",
+        mpesa_code: "",
+        status: "paid",
+      });
+    }
+  }, [editData, open, form]);
 
   const { data: customers } = useQuery({
     queryKey: ["customers"],
@@ -85,24 +107,42 @@ export function PaymentFormDialog({ open, onOpenChange }: PaymentFormDialogProps
 
   const mutation = useMutation({
     mutationFn: async (data: PaymentFormData) => {
-      const { error } = await supabase
-        .from("payments")
-        .insert([{
-          customer_id: data.customer_id,
-          amount: parseFloat(data.amount),
-          due_date: format(data.due_date, "yyyy-MM-dd"),
-          payment_method: data.payment_method,
-          mpesa_code: data.mpesa_code || null,
-          status: data.status,
-        }]);
-      
-      if (error) throw error;
+      if (editData) {
+        const { error } = await supabase
+          .from("payments")
+          .update({
+            customer_id: data.customer_id,
+            amount: parseFloat(data.amount),
+            due_date: format(data.due_date, "yyyy-MM-dd"),
+            payment_method: data.payment_method,
+            mpesa_code: data.mpesa_code || null,
+            status: data.status,
+          })
+          .eq("id", editData.id);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("payments")
+          .insert([{
+            customer_id: data.customer_id,
+            amount: parseFloat(data.amount),
+            due_date: format(data.due_date, "yyyy-MM-dd"),
+            payment_method: data.payment_method,
+            mpesa_code: data.mpesa_code || null,
+            status: data.status,
+          }]);
+        
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       toast({
-        title: "Payment created",
-        description: "New payment record has been added successfully.",
+        title: editData ? "Payment updated" : "Payment created",
+        description: editData 
+          ? "Payment has been updated successfully."
+          : "New payment record has been added successfully.",
       });
       onOpenChange(false);
       form.reset();
@@ -110,7 +150,7 @@ export function PaymentFormDialog({ open, onOpenChange }: PaymentFormDialogProps
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to create payment: " + error.message,
+        description: `Failed to ${editData ? "update" : "create"} payment: ` + error.message,
         variant: "destructive",
       });
     },
@@ -124,8 +164,10 @@ export function PaymentFormDialog({ open, onOpenChange }: PaymentFormDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Payment</DialogTitle>
-          <DialogDescription>Record a new payment</DialogDescription>
+          <DialogTitle>{editData ? "Edit Payment" : "Add Payment"}</DialogTitle>
+          <DialogDescription>
+            {editData ? "Update payment information" : "Record a new payment"}
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -254,11 +296,10 @@ export function PaymentFormDialog({ open, onOpenChange }: PaymentFormDialogProps
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
-                      <SelectItem value="overdue">Overdue</SelectItem>
-                    </SelectContent>
+                     <SelectContent>
+                       <SelectItem value="paid">Paid</SelectItem>
+                       <SelectItem value="overdue">Overdue</SelectItem>
+                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
@@ -269,7 +310,9 @@ export function PaymentFormDialog({ open, onOpenChange }: PaymentFormDialogProps
                 Cancel
               </Button>
               <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? "Creating..." : "Create Payment"}
+                {mutation.isPending 
+                  ? (editData ? "Updating..." : "Creating...") 
+                  : (editData ? "Update Payment" : "Create Payment")}
               </Button>
             </div>
           </form>

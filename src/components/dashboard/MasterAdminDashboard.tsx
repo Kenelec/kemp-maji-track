@@ -11,10 +11,12 @@ import {
   Download
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { CustomersSection } from "./sections/CustomersSection";
 import { ProductsSection } from "./sections/ProductsSection";
 import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
+import { DashboardSection } from "./sections/DashboardSection";
 
 interface MasterAdminDashboardProps {
   onLogout: () => void;
@@ -22,7 +24,7 @@ interface MasterAdminDashboardProps {
 
 const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
   const { user, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState("deliveries");
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   const handleLogout = async () => {
     await signOut();
@@ -30,6 +32,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
   };
 
   const menuItems = [
+    { id: "dashboard", label: "Dashboard", icon: Users },
     { id: "deliveries", label: "Deliveries", icon: Truck },
     { id: "payments", label: "Payments", icon: CreditCard },
     { id: "customers", label: "Customers", icon: Users },
@@ -83,6 +86,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
 
         {/* Main Content */}
         <main className="flex-1 p-6">
+          {activeTab === "dashboard" && <DashboardSection />}
           {activeTab === "deliveries" && <DeliveriesSection />}
           {activeTab === "payments" && <PaymentsSection />}
           {activeTab === "customers" && <CustomersSection />}
@@ -102,7 +106,31 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                     <CardDescription>Export delivery data with filters</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button variant="outline" className="w-full">
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={async () => {
+                        const { data, error } = await supabase.from("deliveries").select("*, customers(customer_name)");
+                        if (error) return;
+                        const csv = [
+                          ["Customer", "Date", "Quantity", "Unit Rate", "Total", "Status"],
+                          ...data.map(d => [
+                            d.customers?.customer_name || "",
+                            d.delivery_date,
+                            d.qty,
+                            d.unit_rate,
+                            d.total_amount,
+                            d.delivery_status
+                          ])
+                        ].map(row => row.join(",")).join("\n");
+                        const blob = new Blob([csv], { type: "text/csv" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = "deliveries.csv";
+                        a.click();
+                      }}
+                    >
                       <Download className="w-4 h-4 mr-2" />
                       Export CSV
                     </Button>
@@ -115,7 +143,31 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                     <CardDescription>Export payment records</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button variant="outline" className="w-full">
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={async () => {
+                        const { data, error } = await supabase.from("payments").select("*, customers(customer_name)");
+                        if (error) return;
+                        const csv = [
+                          ["Customer", "Amount", "Due Date", "Method", "M-Pesa Code", "Status"],
+                          ...data.map(p => [
+                            p.customers?.customer_name || "",
+                            p.amount,
+                            p.due_date,
+                            p.payment_method,
+                            p.mpesa_code || "",
+                            p.status
+                          ])
+                        ].map(row => row.join(",")).join("\n");
+                        const blob = new Blob([csv], { type: "text/csv" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = "payments.csv";
+                        a.click();
+                      }}
+                    >
                       <Download className="w-4 h-4 mr-2" />
                       Export CSV
                     </Button>
@@ -128,7 +180,30 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                     <CardDescription>Export customer database</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button variant="outline" className="w-full">
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={async () => {
+                        const { data, error } = await supabase.from("customers").select("*");
+                        if (error) return;
+                        const csv = [
+                          ["Name", "Phone", "Email", "Area", "Address"],
+                          ...data.map(c => [
+                            c.customer_name,
+                            c.phone || "",
+                            c.email || "",
+                            c.area || "",
+                            c.address || ""
+                          ])
+                        ].map(row => row.join(",")).join("\n");
+                        const blob = new Blob([csv], { type: "text/csv" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = "customers.csv";
+                        a.click();
+                      }}
+                    >
                       <Download className="w-4 h-4 mr-2" />
                       Export CSV
                     </Button>
