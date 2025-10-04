@@ -38,12 +38,14 @@ import { cn } from "@/lib/utils";
 
 const deliverySchema = z.object({
   customer_id: z.string().min(1, "Customer is required"),
+  product_id: z.string().min(1, "Product is required"),
   delivery_date: z.date({
     required_error: "Delivery date is required",
   }),
   qty: z.string().min(1, "Quantity is required"),
   unit_rate: z.string().min(1, "Unit rate is required"),
   delivery_status: z.string().default("delivered"),
+  delivery_note_no: z.string().optional(),
 });
 
 type DeliveryFormData = z.infer<typeof deliverySchema>;
@@ -63,9 +65,11 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
     resolver: zodResolver(deliverySchema),
     defaultValues: {
       customer_id: "",
+      product_id: "",
       qty: "",
       unit_rate: "",
       delivery_status: "delivered",
+      delivery_note_no: "",
     },
   });
 
@@ -82,21 +86,39 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
     },
   });
 
+  const { data: products } = useQuery({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   useEffect(() => {
     if (editData && open) {
+      const productId = editData.delivery_items?.[0]?.product_id || "";
       form.reset({
         customer_id: editData.customer_id,
+        product_id: productId,
         delivery_date: new Date(editData.delivery_date),
         qty: editData.qty.toString(),
         unit_rate: editData.unit_rate.toString(),
         delivery_status: editData.delivery_status,
+        delivery_note_no: editData.delivery_note_no || "",
       });
     } else if (!open) {
       form.reset({
         customer_id: "",
+        product_id: "",
         qty: "",
         unit_rate: "",
         delivery_status: "delivered",
+        delivery_note_no: "",
       });
     }
   }, [editData, open, form]);
@@ -107,8 +129,13 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
       const unit_rate = parseFloat(data.unit_rate);
       const total_amount = qty * unit_rate;
 
+      // Get product name
+      const product = products?.find(p => p.id === data.product_id);
+      const productName = product?.name || "";
+
       if (editData) {
-        const { error } = await supabase
+        // Update delivery
+        const { error: deliveryError } = await supabase
           .from("deliveries")
           .update({
             customer_id: data.customer_id,
@@ -117,12 +144,35 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
             unit_rate,
             total_amount,
             delivery_status: data.delivery_status,
+            delivery_note_no: data.delivery_note_no,
           })
           .eq("id", editData.id);
         
-        if (error) throw error;
+        if (deliveryError) throw deliveryError;
+
+        // Update delivery items
+        const { error: itemsError } = await supabase
+          .from("delivery_items")
+          .delete()
+          .eq("delivery_id", editData.id);
+        
+        if (itemsError) throw itemsError;
+
+        const { error: insertItemError } = await supabase
+          .from("delivery_items")
+          .insert([{
+            delivery_id: editData.id,
+            product_id: data.product_id,
+            product_name: productName,
+            quantity: qty,
+            unit_price: unit_rate,
+            total_price: total_amount,
+          }]);
+        
+        if (insertItemError) throw insertItemError;
       } else {
-        const { error } = await supabase
+        // Insert delivery
+        const { data: deliveryData, error: deliveryError } = await supabase
           .from("deliveries")
           .insert([{
             customer_id: data.customer_id,
@@ -131,10 +181,27 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
             unit_rate,
             total_amount,
             delivery_status: data.delivery_status,
+            delivery_note_no: data.delivery_note_no,
             created_by_user: user?.id,
+          }])
+          .select()
+          .single();
+        
+        if (deliveryError) throw deliveryError;
+
+        // Insert delivery items
+        const { error: itemsError } = await supabase
+          .from("delivery_items")
+          .insert([{
+            delivery_id: deliveryData.id,
+            product_id: data.product_id,
+            product_name: productName,
+            quantity: qty,
+            unit_price: unit_rate,
+            total_price: total_amount,
           }]);
         
-        if (error) throw error;
+        if (itemsError) throw itemsError;
       }
     },
     onSuccess: () => {
@@ -192,6 +259,43 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="product_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a product" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {products?.map((product) => (
+                        <SelectItem key={product.id} value={product.id}>
+                          {product.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="delivery_note_no"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Delivery Note No. (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="DN-001" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
