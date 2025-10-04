@@ -84,8 +84,12 @@ export function DashboardSection() {
     },
   });
 
-  const cashPayments = paymentsData?.filter(p => p.payment_method === "cash" && p.status === "paid").length || 0;
-  const mpesaPayments = paymentsData?.filter(p => p.payment_method === "mpesa" && p.status === "paid").length || 0;
+  const cashPayments = paymentsData?.filter(p => p.payment_method === "cash" && p.status === "paid") || [];
+  const mpesaPayments = paymentsData?.filter(p => p.payment_method === "mpesa" && p.status === "paid") || [];
+  
+  const cashTotal = cashPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const mpesaTotal = mpesaPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const overdueTotal = overduePayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
 
   return (
     <div className="space-y-6">
@@ -103,7 +107,7 @@ export function DashboardSection() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-4xl font-bold text-primary">{customersCount}</div>
+          <div className="text-4xl font-bold text-primary">{customersCount || 0}</div>
         </CardContent>
       </Card>
 
@@ -166,14 +170,14 @@ export function DashboardSection() {
                 <CreditCard className="w-4 h-4" />
                 Cash Payments
               </div>
-              <div className="text-3xl font-bold text-secondary">{cashPayments}</div>
+              <div className="text-3xl font-bold text-secondary">KSh {cashTotal.toLocaleString()}</div>
             </div>
             <div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                 <CreditCard className="w-4 h-4" />
                 M-Pesa Payments
               </div>
-              <div className="text-3xl font-bold text-accent">{mpesaPayments}</div>
+              <div className="text-3xl font-bold text-accent">KSh {mpesaTotal.toLocaleString()}</div>
             </div>
           </CardContent>
         </Card>
@@ -182,13 +186,13 @@ export function DashboardSection() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-destructive" />
-              Overdue Payments
+              Payments Overdue
             </CardTitle>
             <CardDescription>Payments requiring attention</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-destructive">{overduePayments?.length || 0}</div>
-            <p className="text-sm text-muted-foreground mt-2">payments overdue</p>
+            <div className="text-4xl font-bold text-destructive">KSh {overdueTotal.toLocaleString()}</div>
+            <p className="text-sm text-muted-foreground mt-2">{overduePayments?.length || 0} payments overdue</p>
           </CardContent>
         </Card>
       </div>

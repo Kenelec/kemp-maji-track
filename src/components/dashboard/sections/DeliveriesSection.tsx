@@ -35,7 +35,11 @@ export function DeliveriesSection() {
         .from("deliveries")
         .select(`
           *,
-          customers (customer_name)
+          customers (customer_name),
+          delivery_items (
+            product_name,
+            quantity
+          )
         `)
         .order("delivery_date", { ascending: false });
       
@@ -132,6 +136,7 @@ export function DeliveriesSection() {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Delivery Date</TableHead>
+                  <TableHead>Products</TableHead>
                   <TableHead>Quantity</TableHead>
                   <TableHead>Unit Rate</TableHead>
                   <TableHead>Total Amount</TableHead>
@@ -146,9 +151,18 @@ export function DeliveriesSection() {
                       {delivery.customers?.customer_name || "Unknown"}
                     </TableCell>
                     <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
+                    <TableCell>
+                      {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
+                        delivery.delivery_items.map((item: any, idx: number) => (
+                          <div key={idx}>{item.product_name}</div>
+                        ))
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell>{delivery.qty}</TableCell>
-                    <TableCell>KES {Number(delivery.unit_rate).toLocaleString()}</TableCell>
-                    <TableCell className="font-semibold">KES {Number(delivery.total_amount).toLocaleString()}</TableCell>
+                    <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
+                    <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge className={getStatusColor(delivery.delivery_status)}>
                         {delivery.delivery_status}

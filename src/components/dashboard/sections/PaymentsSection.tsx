@@ -35,7 +35,14 @@ export function PaymentsSection() {
         .from("payments")
         .select(`
           *,
-          customers (customer_name)
+          customers (customer_name),
+          deliveries (
+            total_amount,
+            delivery_items (
+              product_name,
+              quantity
+            )
+          )
         `)
         .order("due_date", { ascending: false });
       
@@ -154,7 +161,10 @@ export function PaymentsSection() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Customer</TableHead>
+                  <TableHead>Products</TableHead>
+                  <TableHead>Qty</TableHead>
                   <TableHead>Amount</TableHead>
+                  <TableHead>Balance/Credit</TableHead>
                   <TableHead>Due Date</TableHead>
                   <TableHead>Payment Method</TableHead>
                   <TableHead>M-Pesa Code</TableHead>
@@ -163,42 +173,79 @@ export function PaymentsSection() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell className="font-medium">
-                      {payment.customers?.customer_name || "Unknown"}
-                    </TableCell>
-                    <TableCell className="font-semibold">KES {Number(payment.amount).toLocaleString()}</TableCell>
-                    <TableCell>{format(new Date(payment.due_date), "MMM dd, yyyy")}</TableCell>
-                    <TableCell className="capitalize">{payment.payment_method}</TableCell>
-                    <TableCell>{payment.mpesa_code || "—"}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusColor(payment.status)}>
-                        {payment.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {payment.status === "pending" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => updatePaymentStatus.mutate({ id: payment.id, status: "paid" })}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Mark Paid
-                          </Button>
+                {payments.map((payment) => {
+                  const deliveryAmount = payment.deliveries?.total_amount ? Number(payment.deliveries.total_amount) : 0;
+                  const paymentAmount = Number(payment.amount);
+                  const difference = deliveryAmount - paymentAmount;
+                  
+                  return (
+                    <TableRow key={payment.id}>
+                      <TableCell className="font-medium">
+                        {payment.customers?.customer_name || "Unknown"}
+                      </TableCell>
+                      <TableCell>
+                        {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
+                          payment.deliveries.delivery_items.map((item: any, idx: number) => (
+                            <div key={idx}>{item.product_name}</div>
+                          ))
+                        ) : (
+                          "—"
                         )}
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
+                          payment.deliveries.delivery_items.map((item: any, idx: number) => (
+                            <div key={idx}>{item.quantity}</div>
+                          ))
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell className="font-semibold">KSh {Number(payment.amount).toLocaleString()}</TableCell>
+                      <TableCell>
+                        {payment.deliveries && deliveryAmount > 0 ? (
+                          difference > 0 ? (
+                            <span className="text-orange-600 font-medium">Pending: KSh {difference.toLocaleString()}</span>
+                          ) : difference < 0 ? (
+                            <span className="text-green-600 font-medium">Credit: KSh {Math.abs(difference).toLocaleString()}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{format(new Date(payment.due_date), "MMM dd, yyyy")}</TableCell>
+                      <TableCell className="capitalize">{payment.payment_method}</TableCell>
+                      <TableCell>{payment.mpesa_code || "—"}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(payment.status)}>
+                          {payment.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {payment.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => updatePaymentStatus.mutate({ id: payment.id, status: "paid" })}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Mark Paid
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
