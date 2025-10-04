@@ -147,6 +147,39 @@ export type Database = {
           },
         ]
       }
+      customers_edits: {
+        Row: {
+          approver: string | null
+          customer_id: string
+          decided_at: string | null
+          id: string
+          proposed_changes: Json
+          requested_at: string
+          requested_by: string
+          status: string
+        }
+        Insert: {
+          approver?: string | null
+          customer_id: string
+          decided_at?: string | null
+          id?: string
+          proposed_changes: Json
+          requested_at?: string
+          requested_by: string
+          status?: string
+        }
+        Update: {
+          approver?: string | null
+          customer_id?: string
+          decided_at?: string | null
+          id?: string
+          proposed_changes?: Json
+          requested_at?: string
+          requested_by?: string
+          status?: string
+        }
+        Relationships: []
+      }
       deliveries: {
         Row: {
           created_at: string | null
@@ -423,9 +456,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_customer_edit: {
+        Args: { approver_id: string; edit_id: string }
+        Returns: undefined
+      }
       get_user_role: {
         Args: { user_uuid: string }
         Returns: string
+      }
+      mark_overdue_payments: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
     }
     Enums: {
