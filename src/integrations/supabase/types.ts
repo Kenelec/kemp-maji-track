@@ -186,6 +186,7 @@ export type Database = {
           created_by_user: string
           customer_id: string
           delivery_date: string
+          delivery_note_no: string | null
           delivery_status: string | null
           id: string
           qty: number
@@ -197,6 +198,7 @@ export type Database = {
           created_by_user: string
           customer_id: string
           delivery_date: string
+          delivery_note_no?: string | null
           delivery_status?: string | null
           id?: string
           qty: number
@@ -208,6 +210,7 @@ export type Database = {
           created_by_user?: string
           customer_id?: string
           delivery_date?: string
+          delivery_note_no?: string | null
           delivery_status?: string | null
           id?: string
           qty?: number
@@ -233,6 +236,7 @@ export type Database = {
       }
       delivery_items: {
         Row: {
+          customer_id: string | null
           delivery_id: string
           id: string
           product_id: string
@@ -242,6 +246,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          customer_id?: string | null
           delivery_id: string
           id?: string
           product_id: string
@@ -251,6 +256,7 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          customer_id?: string | null
           delivery_id?: string
           id?: string
           product_id?: string
@@ -459,6 +465,10 @@ export type Database = {
       apply_customer_edit: {
         Args: { approver_id: string; edit_id: string }
         Returns: undefined
+      }
+      get_auth_uid: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       get_user_role: {
         Args: { user_uuid: string }
