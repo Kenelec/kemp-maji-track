@@ -77,7 +77,7 @@ export function DashboardSection() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payments")
-        .select("*")
+        .select("*, customers(customer_name)")
         .eq("status", "overdue");
       if (error) throw error;
       return data || [];
@@ -90,6 +90,7 @@ export function DashboardSection() {
   const cashTotal = cashPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const mpesaTotal = mpesaPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const overdueTotal = overduePayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+  const uniqueOverdueCustomers = new Set(overduePayments?.map(p => p.customer_id) || []).size;
 
   return (
     <div className="space-y-6">
@@ -193,6 +194,7 @@ export function DashboardSection() {
           <CardContent>
             <div className="text-4xl font-bold text-destructive">KSh {overdueTotal.toLocaleString()}</div>
             <p className="text-sm text-muted-foreground mt-2">{overduePayments?.length || 0} payments overdue</p>
+            <p className="text-sm text-muted-foreground">{uniqueOverdueCustomers} customers</p>
           </CardContent>
         </Card>
       </div>

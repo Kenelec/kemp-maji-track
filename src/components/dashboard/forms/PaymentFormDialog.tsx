@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils";
 
 const paymentSchema = z.object({
   customer_id: z.string().min(1, "Customer is required"),
+  delivery_id: z.string().optional(),
+  product_id: z.string().optional(),
   amount: z.string().min(1, "Amount is required"),
   due_date: z.date({
     required_error: "Due date is required",
@@ -62,6 +64,8 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     resolver: zodResolver(paymentSchema),
     defaultValues: {
       customer_id: "",
+      delivery_id: "",
+      product_id: "",
       amount: "",
       payment_method: "cash",
       mpesa_code: "",
@@ -75,6 +79,8 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     if (editData && open) {
       form.reset({
         customer_id: editData.customer_id,
+        delivery_id: editData.delivery_id || "",
+        product_id: "",
         amount: editData.amount.toString(),
         due_date: new Date(editData.due_date),
         payment_method: editData.payment_method,
@@ -84,6 +90,8 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     } else if (!open) {
       form.reset({
         customer_id: "",
+        delivery_id: "",
+        product_id: "",
         amount: "",
         payment_method: "cash",
         mpesa_code: "",
@@ -105,6 +113,37 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     },
   });
 
+  const selectedCustomerId = form.watch("customer_id");
+
+  const { data: deliveries } = useQuery({
+    queryKey: ["customer-deliveries", selectedCustomerId],
+    queryFn: async () => {
+      if (!selectedCustomerId) return [];
+      const { data, error } = await supabase
+        .from("deliveries")
+        .select("*, delivery_items(product_name, quantity)")
+        .eq("customer_id", selectedCustomerId)
+        .order("delivery_date", { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedCustomerId,
+  });
+
+  const { data: products } = useQuery({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const mutation = useMutation({
     mutationFn: async (data: PaymentFormData) => {
       if (editData) {
@@ -112,6 +151,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           .from("payments")
           .update({
             customer_id: data.customer_id,
+            delivery_id: data.delivery_id || null,
             amount: parseFloat(data.amount),
             due_date: format(data.due_date, "yyyy-MM-dd"),
             payment_method: data.payment_method,
@@ -126,6 +166,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           .from("payments")
           .insert([{
             customer_id: data.customer_id,
+            delivery_id: data.delivery_id || null,
             amount: parseFloat(data.amount),
             due_date: format(data.due_date, "yyyy-MM-dd"),
             payment_method: data.payment_method,
@@ -162,7 +203,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editData ? "Edit Payment" : "Add Payment"}</DialogTitle>
           <DialogDescription>
@@ -187,6 +228,54 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                       {customers?.map((customer) => (
                         <SelectItem key={customer.id} value={customer.id}>
                           {customer.customer_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="delivery_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Delivery (Optional)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a delivery" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {deliveries?.map((delivery) => (
+                        <SelectItem key={delivery.id} value={delivery.id}>
+                          {format(new Date(delivery.delivery_date), "MMM dd, yyyy")} - KSh {Number(delivery.total_amount).toLocaleString()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="product_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product (Optional)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a product" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {products?.map((product) => (
+                        <SelectItem key={product.id} value={product.id}>
+                          {product.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

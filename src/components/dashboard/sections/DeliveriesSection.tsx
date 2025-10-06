@@ -136,6 +136,7 @@ export function DeliveriesSection() {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Delivery Date</TableHead>
+                  <TableHead>Delivery Note No.</TableHead>
                   <TableHead>Products</TableHead>
                   <TableHead>Quantity</TableHead>
                   <TableHead>Unit Rate</TableHead>
@@ -151,6 +152,7 @@ export function DeliveriesSection() {
                       {delivery.customers?.customer_name || "Unknown"}
                     </TableCell>
                     <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
+                    <TableCell>{delivery.delivery_note_no || "—"}</TableCell>
                     <TableCell>
                       {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
                         delivery.delivery_items.map((item: any, idx: number) => (

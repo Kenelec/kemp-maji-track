@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 const customerSchema = z.object({
   customer_name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
-  phone: z.string().optional(),
+  phone: z.string().min(1, "Phone number is required"),
   area: z.string().optional(),
   address: z.string().optional(),
 });
