@@ -158,20 +158,19 @@ export function PaymentsSection() {
             </div>
           ) : (
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Products</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Balance/Credit</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Payment Method</TableHead>
-                  <TableHead>M-Pesa Code</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Products</TableHead>
+                <TableHead>Qty</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Due Date</TableHead>
+                <TableHead>Payment Method</TableHead>
+                <TableHead>M-Pesa Code</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
               <TableBody>
                 {payments.map((payment) => {
                   const deliveryAmount = payment.deliveries?.total_amount ? Number(payment.deliveries.total_amount) : 0;
@@ -202,19 +201,6 @@ export function PaymentsSection() {
                         )}
                       </TableCell>
                       <TableCell className="font-semibold">KSh {Number(payment.amount).toLocaleString()}</TableCell>
-                      <TableCell>
-                        {payment.deliveries && deliveryAmount > 0 ? (
-                          difference > 0 ? (
-                            <span className="text-orange-600 font-medium">Pending: KSh {difference.toLocaleString()}</span>
-                          ) : difference < 0 ? (
-                            <span className="text-green-600 font-medium">Credit: KSh {Math.abs(difference).toLocaleString()}</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
                       <TableCell>{format(new Date(payment.due_date), "MMM dd, yyyy")}</TableCell>
                       <TableCell className="capitalize">{payment.payment_method}</TableCell>
                       <TableCell>{payment.mpesa_code || "—"}</TableCell>

@@ -74,6 +74,8 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   });
 
   const paymentMethod = form.watch("payment_method");
+  const selectedDeliveryId = form.watch("delivery_id");
+  const paymentAmount = form.watch("amount");
 
   useEffect(() => {
     if (editData && open) {
@@ -121,7 +123,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       if (!selectedCustomerId) return [];
       const { data, error } = await supabase
         .from("deliveries")
-        .select("*, delivery_items(product_name, quantity)")
+        .select("*, delivery_items(product_name, quantity, product_id)")
         .eq("customer_id", selectedCustomerId)
         .order("delivery_date", { ascending: false });
       
@@ -143,6 +145,34 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       return data;
     },
   });
+
+  // Auto-populate product and calculate status when delivery is selected
+  useEffect(() => {
+    if (selectedDeliveryId && deliveries) {
+      const selectedDelivery = deliveries.find(d => d.id === selectedDeliveryId);
+      if (selectedDelivery && selectedDelivery.delivery_items?.[0]) {
+        // Auto-select the first product from delivery items
+        form.setValue("product_id", selectedDelivery.delivery_items[0].product_id);
+      }
+    }
+  }, [selectedDeliveryId, deliveries, form]);
+
+  // Auto-calculate status based on payment amount vs delivery amount
+  useEffect(() => {
+    if (selectedDeliveryId && paymentAmount && deliveries) {
+      const selectedDelivery = deliveries.find(d => d.id === selectedDeliveryId);
+      if (selectedDelivery) {
+        const deliveryTotal = Number(selectedDelivery.total_amount);
+        const payment = parseFloat(paymentAmount);
+        
+        if (payment >= deliveryTotal) {
+          form.setValue("status", "paid");
+        } else if (payment > 0 && payment < deliveryTotal) {
+          form.setValue("status", "pending");
+        }
+      }
+    }
+  }, [selectedDeliveryId, paymentAmount, deliveries, form]);
 
   const mutation = useMutation({
     mutationFn: async (data: PaymentFormData) => {
@@ -387,6 +417,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                     </FormControl>
                      <SelectContent>
                        <SelectItem value="paid">Paid</SelectItem>
+                       <SelectItem value="pending">Pending</SelectItem>
                        <SelectItem value="overdue">Overdue</SelectItem>
                      </SelectContent>
                   </Select>
