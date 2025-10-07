@@ -106,26 +106,36 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   }, [editData, open, form]);
 
   const { data: customers } = useQuery({
-    queryKey: ["customers-with-pending"],
+    queryKey: ["customers-with-pending", editData?.id],
     queryFn: async () => {
-      // 1) Find customers that have pending or overdue payments
-      const { data: pendingPays, error: payErr } = await supabase
-        .from("payments")
-        .select("customer_id")
-        .in("status", ["pending", "overdue"]);
-      if (payErr) throw payErr;
+      // When editing, show all customers. When adding, show only customers with pending/overdue payments
+      if (editData) {
+        const { data: custRows, error: custErr } = await supabase
+          .from("customers")
+          .select("*")
+          .order("customer_name");
+        if (custErr) throw custErr;
+        return custRows;
+      } else {
+        // 1) Find customers that have pending or overdue payments
+        const { data: pendingPays, error: payErr } = await supabase
+          .from("payments")
+          .select("customer_id")
+          .in("status", ["pending", "overdue"]);
+        if (payErr) throw payErr;
 
-      const ids = Array.from(new Set((pendingPays || []).map((p: any) => p.customer_id).filter(Boolean)));
-      if (ids.length === 0) return [] as any[];
+        const ids = Array.from(new Set((pendingPays || []).map((p: any) => p.customer_id).filter(Boolean)));
+        if (ids.length === 0) return [] as any[];
 
-      // 2) Fetch only those customers
-      const { data: custRows, error: custErr } = await supabase
-        .from("customers")
-        .select("*")
-        .in("id", ids)
-        .order("customer_name");
-      if (custErr) throw custErr;
-      return custRows;
+        // 2) Fetch only those customers
+        const { data: custRows, error: custErr } = await supabase
+          .from("customers")
+          .select("*")
+          .in("id", ids)
+          .order("customer_name");
+        if (custErr) throw custErr;
+        return custRows;
+      }
     },
   });
 
@@ -181,16 +191,37 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     }
   }, [selectedDeliveryId, deliveries, form]);
 
-  // Auto-calculate status + show pending/credit hint based on amount vs delivery total
+  // Fetch existing payments for the selected delivery to calculate cumulative amount
+  const { data: existingPayments } = useQuery({
+    queryKey: ["existing-payments", selectedDeliveryId],
+    queryFn: async () => {
+      if (!selectedDeliveryId) return [];
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("delivery_id", selectedDeliveryId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedDeliveryId,
+  });
+
+  // Auto-calculate status based on cumulative payments vs delivery total
   useEffect(() => {
-    if (!selectedDeliveryId || !deliveries) return;
+    if (!selectedDeliveryId || !deliveries || !existingPayments) return;
     const sel = deliveries.find((d: any) => d.id === selectedDeliveryId);
     const deliveryTotal = sel ? Number(sel.total_amount) : NaN;
-    const payment = paymentAmount ? parseFloat(paymentAmount) : NaN;
+    const currentPayment = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    if (isNaN(deliveryTotal) || isNaN(payment)) return;
+    if (isNaN(deliveryTotal)) return;
 
-    const diff = payment - deliveryTotal; // >0 => credit, <0 => pending
+    // Calculate total of other payments (excluding current edit if editing)
+    const otherPaymentsTotal = existingPayments
+      .filter((p: any) => !editData || p.id !== editData.id)
+      .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+
+    const totalPaid = otherPaymentsTotal + currentPayment;
+    const diff = totalPaid - deliveryTotal; // >0 => credit, <0 => pending
 
     if (diff > 0) {
       form.setValue("status", "credit");
@@ -199,7 +230,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     } else {
       form.setValue("status", "pending");
     }
-  }, [selectedDeliveryId, paymentAmount, deliveries, form]);
+  }, [selectedDeliveryId, paymentAmount, deliveries, existingPayments, editData, form]);
 
   const mutation = useMutation({
     mutationFn: async (data: PaymentFormData) => {
@@ -465,19 +496,27 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                     </SelectContent>
                   </Select>
                   {/* Dynamic pending/credit helper */}
-                  {selectedDelivery && paymentAmount && (
+                  {selectedDelivery && paymentAmount && existingPayments && (
                     (() => {
                       const deliveryTotal = Number(selectedDelivery.total_amount || 0);
-                      const payment = parseFloat(paymentAmount || "0");
-                      if (!isNaN(deliveryTotal) && !isNaN(payment)) {
-                        const diff = payment - deliveryTotal;
+                      const currentPayment = parseFloat(paymentAmount || "0");
+                      
+                      // Calculate total of other payments (excluding current edit if editing)
+                      const otherPaymentsTotal = existingPayments
+                        .filter((p: any) => !editData || p.id !== editData.id)
+                        .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+                      
+                      const totalPaid = otherPaymentsTotal + currentPayment;
+                      
+                      if (!isNaN(deliveryTotal) && !isNaN(totalPaid)) {
+                        const diff = totalPaid - deliveryTotal;
                         if (diff > 0) {
                           return <p className="text-sm text-muted-foreground mt-1">KSh {Math.abs(diff).toLocaleString()} credit</p>;
                         }
                         if (diff < 0) {
                           return <p className="text-sm text-muted-foreground mt-1">KSh {Math.abs(diff).toLocaleString()} pending</p>;
                         }
-                        return <p className="text-sm text-muted-foreground mt-1">Paid</p>;
+                        return <p className="text-sm text-muted-foreground mt-1">Fully paid</p>;
                       }
                       return null;
                     })()
