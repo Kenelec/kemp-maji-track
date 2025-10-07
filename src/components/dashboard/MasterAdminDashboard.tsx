@@ -152,25 +152,50 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                           .select(`*, customers(customer_name), deliveries(total_amount)`);
                         if (error || !data) return;
 
-                        const rows = data.map((p: any) => {
-                          const deliveryTotal = p.deliveries?.total_amount ? Number(p.deliveries.total_amount) : 0;
-                          const paymentAmt = Number(p.amount || 0);
-                          let statusDisplay = p.status;
-                          if (deliveryTotal > 0) {
-                            const diff = paymentAmt - deliveryTotal;
-                            if (diff > 0) statusDisplay = `${Math.abs(diff)} credit`;
-                            else if (diff < 0) statusDisplay = `${Math.abs(diff)} pending`;
-                            else statusDisplay = "paid";
-                          }
-                          return [
-                            p.customers?.customer_name || "",
-                            paymentAmt,
-                            p.due_date,
-                            p.payment_method,
-                            p.mpesa_code || "",
-                            statusDisplay
-                          ];
+                        // Build derived status per payment using cumulative sums per delivery
+                        const byDelivery = new Map<string, any[]>();
+                        data.forEach((p: any) => {
+                          const key = p.delivery_id || `no-delivery-${p.id}`;
+                          const arr = byDelivery.get(key) || [];
+                          arr.push(p);
+                          byDelivery.set(key, arr);
                         });
+
+                        const statusById = new Map<string, string>();
+                        byDelivery.forEach((arr) => {
+                          arr.sort((a: any, b: any) => {
+                            const at = new Date(a.created_at || a.due_date || 0).getTime();
+                            const bt = new Date(b.created_at || b.due_date || 0).getTime();
+                            if (at !== bt) return at - bt;
+                            return String(a.id).localeCompare(String(b.id));
+                          });
+                          const deliveryTotal = arr[0]?.deliveries?.total_amount ? Number(arr[0].deliveries.total_amount) : 0;
+                          let running = 0;
+                          arr.forEach((p: any) => {
+                            running += Number(p.amount || 0);
+                            const diff = running - deliveryTotal;
+                            let label: string;
+                            if (deliveryTotal === 0) {
+                              label = p.status;
+                            } else if (diff > 0) {
+                              label = `${Math.abs(diff)} credit`;
+                            } else if (diff < 0) {
+                              label = `${Math.abs(diff)} pending`;
+                            } else {
+                              label = "paid";
+                            }
+                            statusById.set(p.id, label);
+                          });
+                        });
+
+                        const rows = data.map((p: any) => [
+                          p.customers?.customer_name || "",
+                          Number(p.amount || 0),
+                          p.due_date,
+                          p.payment_method,
+                          p.mpesa_code || "",
+                          statusById.get(p.id) || p.status,
+                        ]);
 
                         const csv = [["Customer", "Amount", "Due Date", "Method", "M-Pesa Code", "Status"], ...rows]
                           .map((row) => row.join(","))

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -133,6 +133,54 @@ export function PaymentsSection() {
     }
   };
 
+  const derivedStatusById = useMemo(() => {
+    const map = new Map<string, { type: 'paid' | 'pending' | 'credit'; label: string }>();
+    if (!payments) return map;
+
+    const groups = new Map<string, any[]>();
+    payments.forEach((p: any) => {
+      const key = p.delivery_id || `no-delivery-${p.id}`;
+      const arr = groups.get(key) || [];
+      arr.push(p);
+      groups.set(key, arr);
+    });
+
+    groups.forEach((arr) => {
+      arr.sort((a: any, b: any) => {
+        const at = new Date(a.created_at || a.due_date || 0).getTime();
+        const bt = new Date(b.created_at || b.due_date || 0).getTime();
+        if (at !== bt) return at - bt;
+        return String(a.id).localeCompare(String(b.id));
+      });
+
+      const deliveryTotal = arr[0]?.deliveries?.total_amount ? Number(arr[0].deliveries.total_amount) : 0;
+      let running = 0;
+      arr.forEach((p: any) => {
+        running += Number(p.amount || 0);
+        const diff = running - deliveryTotal;
+        let type: 'paid' | 'pending' | 'credit';
+        let label: string;
+        if (deliveryTotal === 0) {
+          // Fallback to stored status when no delivery is linked
+          type = (p.status === 'credit' || p.status === 'paid' || p.status === 'pending') ? p.status : 'paid';
+          label = type;
+        } else if (diff > 0) {
+          type = 'credit';
+          label = `${Math.abs(diff)} credit`;
+        } else if (diff < 0) {
+          type = 'pending';
+          label = `${Math.abs(diff)} pending`;
+        } else {
+          type = 'paid';
+          label = 'paid';
+        }
+        map.set(p.id, { type, label });
+      });
+    });
+
+    return map;
+  }, [payments]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -207,9 +255,16 @@ export function PaymentsSection() {
                       <TableCell className="capitalize">{payment.payment_method}</TableCell>
                       <TableCell>{payment.mpesa_code || "—"}</TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(payment.status)}>
-                          {payment.status}
-                        </Badge>
+                        {(() => {
+                          const derived = derivedStatusById.get(payment.id);
+                          const type = derived?.type || payment.status;
+                          const label = derived?.label || payment.status;
+                          return (
+                            <Badge className={getStatusColor(type)}>
+                              {label}
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
