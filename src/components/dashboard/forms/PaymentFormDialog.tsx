@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -77,6 +77,9 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   const selectedDeliveryId = form.watch("delivery_id");
   const paymentAmount = form.watch("amount");
 
+  // Controlled popover for the date picker to auto-close on select
+  const [dateOpen, setDateOpen] = useState(false);
+
   useEffect(() => {
     if (editData && open) {
       form.reset({
@@ -103,15 +106,26 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   }, [editData, open, form]);
 
   const { data: customers } = useQuery({
-    queryKey: ["customers"],
+    queryKey: ["customers-with-pending"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1) Find customers that have pending or overdue payments
+      const { data: pendingPays, error: payErr } = await supabase
+        .from("payments")
+        .select("customer_id")
+        .in("status", ["pending", "overdue"]);
+      if (payErr) throw payErr;
+
+      const ids = Array.from(new Set((pendingPays || []).map((p: any) => p.customer_id).filter(Boolean)));
+      if (ids.length === 0) return [] as any[];
+
+      // 2) Fetch only those customers
+      const { data: custRows, error: custErr } = await supabase
         .from("customers")
         .select("*")
+        .in("id", ids)
         .order("customer_name");
-      
-      if (error) throw error;
-      return data;
+      if (custErr) throw custErr;
+      return custRows;
     },
   });
 
@@ -146,6 +160,16 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     },
   });
 
+  // Derivations for selected delivery
+  const selectedDelivery = useMemo(() => {
+    return deliveries?.find((d: any) => d.id === selectedDeliveryId);
+  }, [deliveries, selectedDeliveryId]);
+
+  const totalDeliveryQty = useMemo(() => {
+    if (!selectedDelivery?.delivery_items) return 0;
+    return selectedDelivery.delivery_items.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+  }, [selectedDelivery]);
+
   // Auto-populate product and calculate status when delivery is selected
   useEffect(() => {
     if (selectedDeliveryId && deliveries) {
@@ -157,20 +181,23 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     }
   }, [selectedDeliveryId, deliveries, form]);
 
-  // Auto-calculate status based on payment amount vs delivery amount
+  // Auto-calculate status + show pending/credit hint based on amount vs delivery total
   useEffect(() => {
-    if (selectedDeliveryId && paymentAmount && deliveries) {
-      const selectedDelivery = deliveries.find(d => d.id === selectedDeliveryId);
-      if (selectedDelivery) {
-        const deliveryTotal = Number(selectedDelivery.total_amount);
-        const payment = parseFloat(paymentAmount);
-        
-        if (payment >= deliveryTotal) {
-          form.setValue("status", "paid");
-        } else if (payment > 0 && payment < deliveryTotal) {
-          form.setValue("status", "pending");
-        }
-      }
+    if (!selectedDeliveryId || !deliveries) return;
+    const sel = deliveries.find((d: any) => d.id === selectedDeliveryId);
+    const deliveryTotal = sel ? Number(sel.total_amount) : NaN;
+    const payment = paymentAmount ? parseFloat(paymentAmount) : NaN;
+
+    if (isNaN(deliveryTotal) || isNaN(payment)) return;
+
+    const diff = payment - deliveryTotal; // >0 => credit, <0 => pending
+
+    if (diff > 0) {
+      form.setValue("status", "credit");
+    } else if (diff === 0) {
+      form.setValue("status", "paid");
+    } else {
+      form.setValue("status", "pending");
     }
   }, [selectedDeliveryId, paymentAmount, deliveries, form]);
 
@@ -314,6 +341,18 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                 </FormItem>
               )}
             />
+            {/* Read-only quantity from the selected delivery */}
+            {selectedDeliveryId && (
+              <div>
+                <FormItem>
+                  <FormLabel>Quantity</FormLabel>
+                  <FormControl>
+                    <Input value={totalDeliveryQty} readOnly disabled />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              </div>
+            )}
             <FormField
               control={form.control}
               name="amount"
@@ -333,7 +372,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>Due Date</FormLabel>
-                  <Popover>
+                  <Popover open={dateOpen} onOpenChange={setDateOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
@@ -356,7 +395,10 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={(d) => {
+                          field.onChange(d);
+                          setDateOpen(false);
+                        }}
                         initialFocus
                         className="pointer-events-auto"
                       />
@@ -415,12 +457,31 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                     <SelectContent>
-                       <SelectItem value="paid">Paid</SelectItem>
-                       <SelectItem value="pending">Pending</SelectItem>
-                       <SelectItem value="overdue">Overdue</SelectItem>
-                     </SelectContent>
+                    <SelectContent>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="credit">Credit</SelectItem>
+                      <SelectItem value="overdue">Overdue</SelectItem>
+                    </SelectContent>
                   </Select>
+                  {/* Dynamic pending/credit helper */}
+                  {selectedDelivery && paymentAmount && (
+                    (() => {
+                      const deliveryTotal = Number(selectedDelivery.total_amount || 0);
+                      const payment = parseFloat(paymentAmount || "0");
+                      if (!isNaN(deliveryTotal) && !isNaN(payment)) {
+                        const diff = payment - deliveryTotal;
+                        if (diff > 0) {
+                          return <p className="text-sm text-muted-foreground mt-1">KSh {Math.abs(diff).toLocaleString()} credit</p>;
+                        }
+                        if (diff < 0) {
+                          return <p className="text-sm text-muted-foreground mt-1">KSh {Math.abs(diff).toLocaleString()} pending</p>;
+                        }
+                        return <p className="text-sm text-muted-foreground mt-1">Paid</p>;
+                      }
+                      return null;
+                    })()
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

@@ -147,19 +147,35 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                       variant="outline" 
                       className="w-full"
                       onClick={async () => {
-                        const { data, error } = await supabase.from("payments").select("*, customers(customer_name)");
-                        if (error) return;
-                        const csv = [
-                          ["Customer", "Amount", "Due Date", "Method", "M-Pesa Code", "Status"],
-                          ...data.map(p => [
+                        const { data, error } = await supabase
+                          .from("payments")
+                          .select(`*, customers(customer_name), deliveries(total_amount)`);
+                        if (error || !data) return;
+
+                        const rows = data.map((p: any) => {
+                          const deliveryTotal = p.deliveries?.total_amount ? Number(p.deliveries.total_amount) : 0;
+                          const paymentAmt = Number(p.amount || 0);
+                          let statusDisplay = p.status;
+                          if (deliveryTotal > 0) {
+                            const diff = paymentAmt - deliveryTotal;
+                            if (diff > 0) statusDisplay = `${Math.abs(diff)} credit`;
+                            else if (diff < 0) statusDisplay = `${Math.abs(diff)} pending`;
+                            else statusDisplay = "paid";
+                          }
+                          return [
                             p.customers?.customer_name || "",
-                            p.amount,
+                            paymentAmt,
                             p.due_date,
                             p.payment_method,
                             p.mpesa_code || "",
-                            p.status
-                          ])
-                        ].map(row => row.join(",")).join("\n");
+                            statusDisplay
+                          ];
+                        });
+
+                        const csv = [["Customer", "Amount", "Due Date", "Method", "M-Pesa Code", "Status"], ...rows]
+                          .map((row) => row.join(","))
+                          .join("\n");
+
                         const blob = new Blob([csv], { type: "text/csv" });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");

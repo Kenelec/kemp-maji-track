@@ -126,6 +126,8 @@ export function PaymentsSection() {
         return "bg-green-500/10 text-green-500";
       case "overdue":
         return "bg-red-500/10 text-red-500";
+      case "credit":
+        return "bg-blue-500/10 text-blue-500";
       default:
         return "bg-gray-500/10 text-gray-500";
     }
