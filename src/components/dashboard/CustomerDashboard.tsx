@@ -11,7 +11,9 @@ import {
   CreditCard, 
   Eye,
   DollarSign,
-  Calendar
+  Calendar,
+  Menu,
+  X
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -23,6 +25,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
   const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [mpesaCode, setMpesaCode] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut();
@@ -37,30 +40,62 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Mobile menu button */}
+      <div className="md:hidden fixed top-4 left-4 z-50">
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="bg-primary text-primary-foreground"
+        >
+          {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </Button>
+      </div>
+
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="flex h-16 items-center justify-between px-6">
+      <header className="border-b bg-card md:ml-64">
+        <div className="flex h-16 items-center justify-between px-4 md:px-6">
           <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-bold text-primary">KEMP Maji Track</h1>
-            <Badge variant="secondary" className="bg-tertiary/10 text-tertiary">
+            <h1 className="text-lg md:text-xl font-bold text-primary">KEMP Maji Track</h1>
+            <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-xs md:text-sm">
               Customer
             </Badge>
           </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-muted-foreground">
-              Welcome, {user?.email}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-muted-foreground hidden md:block">
+              Welcome, {user?.email?.split('@')[0] || 'User'}
             </span>
             <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
+              <LogOut className="w-4 h-4 mr-1 md:mr-2" />
+              <span className="hidden md:inline">Logout</span>
             </Button>
           </div>
         </div>
       </header>
 
       <div className="flex">
+        {/* Sidebar - Mobile overlay */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
-        <aside className="w-64 min-h-[calc(100vh-4rem)] border-r bg-card p-4">
+        <aside className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-card border-r p-4 transform transition-transform duration-300 ease-in-out ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } md:translate-x-0 md:w-64`}>
+          <div className="flex justify-between items-center mb-6 md:hidden">
+            <h2 className="text-lg font-semibold">Menu</h2>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
           <nav className="space-y-2">
             {menuItems.map((item) => {
               const Icon = item.icon;
@@ -69,7 +104,10 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                   key={item.id}
                   variant={activeTab === item.id ? "default" : "ghost"}
                   className="w-full justify-start"
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setSidebarOpen(false); // Close sidebar after selection on mobile
+                  }}
                 >
                   <Icon className="w-4 h-4 mr-3" />
                   {item.label}
@@ -80,48 +118,48 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-6 pt-20 md:pt-6 md:ml-0">
           {activeTab === "overview" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Dashboard Overview</h2>
-                <p className="text-muted-foreground">Welcome to your water delivery portal</p>
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">Dashboard Overview</h2>
+                <p className="text-sm md:text-muted-foreground">Welcome to your water delivery portal</p>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                <Card className="p-4">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Deliveries</CardTitle>
                     <Truck className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">0</div>
+                    <div className="text-xl md:text-2xl font-bold">0</div>
                     <p className="text-xs text-muted-foreground">
                       +0% from last month
                     </p>
                   </CardContent>
                 </Card>
                 
-                <Card>
+                <Card className="p-4">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">KSh 0</div>
+                    <div className="text-xl md:text-2xl font-bold">KSh 0</div>
                     <p className="text-xs text-muted-foreground">
                       0 pending payments
                     </p>
                   </CardContent>
                 </Card>
                 
-                <Card>
+                <Card className="p-4">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Next Delivery</CardTitle>
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">-</div>
+                    <div className="text-xl md:text-2xl font-bold">-</div>
                     <p className="text-xs text-muted-foreground">
                       No scheduled deliveries
                     </p>
@@ -134,8 +172,8 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
           {activeTab === "deliveries" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">My Deliveries</h2>
-                <p className="text-muted-foreground">Track your water delivery history</p>
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">My Deliveries</h2>
+                <p className="text-sm md:text-muted-foreground">Track your water delivery history</p>
               </div>
               
               <Card>
@@ -157,8 +195,8 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
           {activeTab === "payments" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">My Payments</h2>
-                <p className="text-muted-foreground">Manage your payment history and pending payments</p>
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">My Payments</h2>
+                <p className="text-sm md:text-muted-foreground">Manage your payment history and pending payments</p>
               </div>
               
               <Card>
@@ -200,11 +238,11 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                       rows={3}
                     />
                   </div>
-                  <div className="flex space-x-2">
-                    <Button className="bg-gradient-primary">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button className="bg-gradient-primary w-full sm:w-auto">
                       Submit M-Pesa Code
                     </Button>
-                    <Button variant="outline">
+                    <Button variant="outline" className="w-full sm:w-auto">
                       Pay by Cash (Notify Admin)
                     </Button>
                   </div>
