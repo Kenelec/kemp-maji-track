@@ -147,6 +147,51 @@
   .animate-bounce {
     animation: bounce 1s infinite;
   }
+
+  /* Responsive utility classes for mobile optimization */
+  /* Mobile-first responsive containers */
+  .container-mobile {
+    @apply px-2 sm:px-4 md:px-6 lg:px-8 mx-auto w-full max-w-[100%];
+  }
+
+  /* Responsive text sizes */
+  .text-sm-mobile { @apply text-xs sm:text-sm; }
+  .text-base-mobile { @apply text-sm sm:text-base; }
+  .text-lg-mobile { @apply text-base sm:text-lg; }
+  .text-xl-mobile { @apply text-lg sm:text-xl; }
+
+  /* Responsive padding */
+  .p-mobile { @apply p-1 sm:p-2 md:p-4; }
+  .py-mobile { @apply py-1 sm:py-2 md:py-4; }
+  .px-mobile { @apply px-1 sm:px-2 md:px-4; }
+
+  /* Responsive margins */
+  .m-mobile { @apply m-1 sm:m-2 md:m-4; }
+  .my-mobile { @apply my-1 sm:my-2 md:my-4; }
+  .mx-mobile { @apply mx-1 sm:mx-2 md:mx-4; }
+
+  /* Responsive grid for dashboard cards */
+  .grid-mobile { @apply grid-cols-1 sm:grid-cols-2 md:grid-cols-3; }
+
+  /* Mobile-friendly sidebar */
+  .sidebar-mobile {
+    @apply fixed inset-y-0 left-0 z-50 w-64 bg-sidebar-background border-r border-sidebar-border transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0;
+  }
+
+  /* Hide sidebar on mobile by default */
+  .sidebar-hidden {
+    @apply -translate-x-full lg:translate-x-0;
+  }
+
+  /* Mobile-friendly buttons */
+  .btn-mobile {
+    @apply px-2 py-1.5 sm:px-3 sm:py-2 text-sm;
+  }
+
+  /* Mobile-friendly card */
+  .card-mobile {
+    @apply w-full p-2 sm:p-3 md:p-4 rounded-lg border bg-card text-card-foreground shadow-sm;
+  }
 }
 
 @keyframes fadeIn {
