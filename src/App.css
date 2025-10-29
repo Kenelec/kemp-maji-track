@@ -1,16 +1,49 @@
+/* Responsive App Styles for KEMP Maji Track */
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem; /* Mobile first - smaller padding */
   text-align: center;
 }
 
+/* Tablet and desktop styles */
+@media (min-width: 768px) {
+  #root {
+    padding: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  #root {
+    padding: 2rem;
+    margin: 0 auto;
+    max-width: 1280px;
+  }
+}
+
 .logo {
-  height: 6em;
-  padding: 1.5em;
+  height: 3em; /* Smaller for mobile */
+  padding: 0.5em;
   will-change: filter;
   transition: filter 300ms;
 }
+
+/* Tablet and desktop logo sizes */
+@media (min-width: 768px) {
+  .logo {
+    height: 4em;
+    padding: 1em;
+  }
+}
+
+@media (min-width: 1024px) {
+  .logo {
+    height: 6em;
+    padding: 1.5em;
+  }
+}
+
 .logo:hover {
   filter: drop-shadow(0 0 2em #646cffaa);
 }
@@ -34,9 +67,28 @@
 }
 
 .card {
-  padding: 2em;
+  padding: 1em; /* Smaller padding for mobile */
+}
+
+@media (min-width: 768px) {
+  .card {
+    padding: 2em;
+  }
 }
 
 .read-the-docs {
   color: #888;
+  font-size: 0.7rem; /* Smaller text for mobile */
+}
+
+@media (min-width: 768px) {
+  .read-the-docs {
+    font-size: 0.8rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .read-the-docs {
+    font-size: 1rem;
+  }
 }
