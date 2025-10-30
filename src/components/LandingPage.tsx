@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Droplets, Truck, CreditCard, Users, BarChart3, Shield, Menu, X } from "lucide-react";
-import kempLogo from "@/assets/kemp-logo.png";
+const kempLogo = "/kemp-logo.png";
 import { useState } from "react";
 
 interface LandingPageProps {
