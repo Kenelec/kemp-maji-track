@@ -67,12 +67,12 @@ const LandingPage = ({ onLogin }: LandingPageProps) => {
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <img src={kempLogo} alt="KEMP Logo" className="w-8 h-8 md:w-10 md:h-10" />
-            <div>
-              <h1 className="text-lg md:text-xl font-bold text-primary">KEMP</h1>
-              <p className="text-xs md:text-sm text-muted-foreground">Maji Track</p>
-            </div>
-          </div>
+  <img src={kempLogo} alt="KEMP Logo" className="w-8 h-8 md:w-10 md:h-10 object-contain" />
+  <div>
+    <h1 className="text-lg md:text-xl font-bold text-primary">KEMP</h1>
+    <p className="text-xs md:text-sm text-muted-foreground">Maji Track</p>
+  </div>
+</div>
           
           {/* Mobile menu */}
           <div className={`fixed top-0 right-0 h-full w-64 bg-card shadow-lg z-50 transform transition-transform duration-300 ease-in-out ${
