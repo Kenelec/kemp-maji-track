@@ -1,4 +1,4 @@
-import kempLogo from "@/assets/kemp-logo.png";
+const kempLogo = "https://github.com/Kenelec/kemp-waterflow/raw/main/src/assets/kemp-logo.png";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
