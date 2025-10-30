@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import kempLogo from "@/assets/kemp-logo.png";
+const kempLogo = "/kemp-logo.png";
 
 interface SplashScreenProps {
   onComplete: () => void;
