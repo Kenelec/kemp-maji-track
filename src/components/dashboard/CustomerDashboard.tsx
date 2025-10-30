@@ -1,3 +1,4 @@
+import kempLogo from "@/assets/kemp-logo.png";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,12 +56,19 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
       {/* Header */}
       <header className="border-b bg-card md:ml-64">
         <div className="flex h-16 items-center justify-between px-4 md:px-6">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-lg md:text-xl font-bold text-primary">KEMP Maji Track</h1>
-            <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-xs md:text-sm">
-              Customer
-            </Badge>
-          </div>
+          <div className="flex items-center space-x-3">
+  <img 
+    src={kempLogo} 
+    alt="KEMP Logo" 
+    className="w-8 h-8 md:w-10 md:h-10 object-contain"
+  />
+  <div>
+    <h1 className="text-lg md:text-xl font-bold text-primary">KEMP Maji Track</h1>
+    <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-xs md:text-sm ml-0">
+      Customer
+    </Badge>
+  </div>
+</div>
           <div className="flex items-center space-x-2">
             <span className="text-sm text-muted-foreground hidden md:block">
               Welcome, {user?.email?.split('@')[0] || 'User'}
