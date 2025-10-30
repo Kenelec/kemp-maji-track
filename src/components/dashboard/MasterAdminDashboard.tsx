@@ -1,3 +1,4 @@
+import kempLogo from "@/assets/kemp-logo.png";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,11 +46,18 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       {/* Header */}
       <header className="border-b bg-card">
         <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-bold text-primary">KEMP Maji Track</h1>
-            <Badge variant="secondary" className="bg-primary/10 text-primary">
-              Master Admin
-            </Badge>
+                    <div className="flex items-center space-x-3">
+            <img 
+              src={kempLogo} 
+              alt="KEMP Logo" 
+              className="w-8 h-8 md:w-10 md:h-10 object-contain"
+            />
+            <div>
+              <h1 className="text-lg md:text-xl font-bold text-primary">KEMP Maji Track</h1>
+              <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-xs md:text-sm ml-0">
+                Master Admin
+              </Badge>
+            </div>
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-muted-foreground">
