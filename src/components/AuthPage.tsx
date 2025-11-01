@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Mail, Lock, User, Phone } from "lucide-react";
+import { ArrowLeft, Mail, Lock, User, Phone, Facebook } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -198,6 +198,35 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
     }
   };
 
+  const handleFacebookLogin = async () => {
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+      
+      if (error) {
+        toast({
+          title: "Facebook Login Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Facebook Login Failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -321,6 +350,17 @@ const AuthPage = ({ onBack }: AuthPageProps) => {
                       <span className="bg-background px-2 text-muted-foreground">or</span>
                     </div>
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleFacebookLogin}
+                    disabled={isLoading}
+                    className="w-full bg-[#1877F2] hover:bg-[#1877F2]/90 text-white border-0"
+                  >
+                    <Facebook className="w-4 h-4 mr-2" />
+                    Continue with Facebook
+                  </Button>
 
                   <Button
                     type="button"

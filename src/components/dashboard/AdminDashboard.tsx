@@ -42,7 +42,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       {/* Header */}
       <header className="border-b bg-card">
         <div className="flex h-16 items-center justify-between px-6">
-                    <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3">
             <img 
               src={kempLogo} 
               alt="KEMP Logo" 
@@ -54,7 +54,6 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                 Admin
               </Badge>
             </div>
-          </div>
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-muted-foreground">
