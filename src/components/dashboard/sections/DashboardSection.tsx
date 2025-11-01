@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
 import { Users, Truck, DollarSign, AlertCircle, CreditCard } from "lucide-react";
-import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths, format } from "date-fns";
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from "date-fns";
 
 export function DashboardSection() {
   const [deliveryPeriod, setDeliveryPeriod] = useState("today");
@@ -15,19 +15,14 @@ export function DashboardSection() {
     switch (period) {
       case "today":
         return { start: startOfDay(now), end: endOfDay(now) };
-      case "yesterday":
-        const yesterday = subDays(now, 1);
-        return { start: startOfDay(yesterday), end: endOfDay(yesterday) };
       case "this-week":
         return { start: startOfWeek(now), end: endOfWeek(now) };
-      case "last-week":
-        const lastWeek = subWeeks(now, 1);
-        return { start: startOfWeek(lastWeek), end: endOfWeek(lastWeek) };
       case "this-month":
         return { start: startOfMonth(now), end: endOfMonth(now) };
-      case "last-month":
-        const lastMonth = subMonths(now, 1);
-        return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) };
+      case "this-year":
+        return { start: startOfYear(now), end: endOfYear(now) };
+      case "all":
+        return null;
       default:
         return { start: startOfDay(now), end: endOfDay(now) };
     }
@@ -47,12 +42,17 @@ export function DashboardSection() {
   const { data: deliveriesData } = useQuery({
     queryKey: ["deliveries-stats", deliveryPeriod],
     queryFn: async () => {
-      const { start, end } = getDateRange(deliveryPeriod);
-      const { data, error } = await supabase
-        .from("deliveries")
-        .select("*")
-        .gte("delivery_date", format(start, "yyyy-MM-dd"))
-        .lte("delivery_date", format(end, "yyyy-MM-dd"));
+      const dateRange = getDateRange(deliveryPeriod);
+      let query = supabase.from("deliveries").select("*");
+      
+      if (dateRange) {
+        const { start, end } = dateRange;
+        query = query
+          .gte("delivery_date", format(start, "yyyy-MM-dd"))
+          .lte("delivery_date", format(end, "yyyy-MM-dd"));
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
@@ -61,12 +61,17 @@ export function DashboardSection() {
   const { data: paymentsData } = useQuery({
     queryKey: ["payments-stats", paymentPeriod],
     queryFn: async () => {
-      const { start, end } = getDateRange(paymentPeriod);
-      const { data, error } = await supabase
-        .from("payments")
-        .select("*")
-        .gte("created_at", start.toISOString())
-        .lte("created_at", end.toISOString());
+      const dateRange = getDateRange(paymentPeriod);
+      let query = supabase.from("payments").select("*");
+      
+      if (dateRange) {
+        const { start, end } = dateRange;
+        query = query
+          .gte("created_at", start.toISOString())
+          .lte("created_at", end.toISOString());
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
@@ -126,11 +131,10 @@ export function DashboardSection() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="yesterday">Yesterday</SelectItem>
                 <SelectItem value="this-week">This Week</SelectItem>
-                <SelectItem value="last-week">Last Week</SelectItem>
                 <SelectItem value="this-month">This Month</SelectItem>
-                <SelectItem value="last-month">Last Month</SelectItem>
+                <SelectItem value="this-year">This Year</SelectItem>
+                <SelectItem value="all">All</SelectItem>
               </SelectContent>
             </Select>
           </CardDescription>
@@ -156,11 +160,10 @@ export function DashboardSection() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="this-week">This Week</SelectItem>
-                  <SelectItem value="last-week">Last Week</SelectItem>
                   <SelectItem value="this-month">This Month</SelectItem>
-                  <SelectItem value="last-month">Last Month</SelectItem>
+                  <SelectItem value="this-year">This Year</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                 </SelectContent>
               </Select>
             </CardDescription>
