@@ -1,7 +1,6 @@
 const kempLogo = "/kemp-logo.png";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
@@ -11,10 +10,14 @@ import {
   Users, 
   Package, 
   Download,
-  Plus,
   AlertTriangle
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { CustomersSection } from "./sections/CustomersSection";
+import { ProductsSection } from "./sections/ProductsSection";
+import { DeliveriesSection } from "./sections/DeliveriesSection";
+import { PaymentsSection } from "./sections/PaymentsSection";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -97,117 +100,13 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
             </AlertDescription>
           </Alert>
 
-          {activeTab === "deliveries" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground">Deliveries</h2>
-                  <p className="text-muted-foreground">View and create water deliveries</p>
-                </div>
-                <Button className="bg-gradient-primary">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Delivery
-                </Button>
-              </div>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Deliveries</CardTitle>
-                  <CardDescription>
-                    Track and manage all water deliveries
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    No deliveries found. Create your first delivery to get started.
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          {activeTab === "deliveries" && <DeliveriesSection />}
 
-          {activeTab === "payments" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground">Payments</h2>
-                  <p className="text-muted-foreground">View customer payments</p>
-                </div>
-              </div>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment Records</CardTitle>
-                  <CardDescription>
-                    View payment status and history
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    No payments found.
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          {activeTab === "payments" && <PaymentsSection />}
 
-          {activeTab === "customers" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground">Customers</h2>
-                  <p className="text-muted-foreground">View and add customer information</p>
-                </div>
-                <Button className="bg-gradient-secondary">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Customer
-                </Button>
-              </div>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Customer Database</CardTitle>
-                  <CardDescription>
-                    View and add customer profiles
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    No customers found. Add your first customer to get started.
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          {activeTab === "customers" && <CustomersSection />}
 
-          {activeTab === "products" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground">Products</h2>
-                  <p className="text-muted-foreground">View and add water products</p>
-                </div>
-                <Button className="bg-gradient-tertiary">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Product
-                </Button>
-              </div>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Product Catalog</CardTitle>
-                  <CardDescription>
-                    View and add water products and pricing
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    No products found. Add your first product to get started.
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          {activeTab === "products" && <ProductsSection />}
 
           {activeTab === "exports" && (
             <div className="space-y-6">
