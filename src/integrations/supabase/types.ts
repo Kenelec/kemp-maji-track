@@ -234,6 +234,45 @@ export type Database = {
           },
         ]
       }
+      delivery_acl: {
+        Row: {
+          created_at: string | null
+          delivery_id: string
+          id: string
+          role: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          delivery_id: string
+          id?: string
+          role?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          delivery_id?: string
+          id?: string
+          role?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_acl_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_acl_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_items: {
         Row: {
           customer_id: string | null
@@ -320,6 +359,79 @@ export type Database = {
           },
         ]
       }
+      payment_approval_requests: {
+        Row: {
+          id: string
+          note: string | null
+          payment_id: string
+          requested_at: string
+          requested_by: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+        }
+        Insert: {
+          id?: string
+          note?: string | null
+          payment_id: string
+          requested_at?: string
+          requested_by: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Update: {
+          id?: string
+          note?: string | null
+          payment_id?: string
+          requested_at?: string
+          requested_by?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_approval_requests_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_approvals: {
+        Row: {
+          action: string
+          approved_at: string
+          approved_by: string
+          id: string
+          payment_id: string
+        }
+        Insert: {
+          action: string
+          approved_at?: string
+          approved_by: string
+          id?: string
+          payment_id: string
+        }
+        Update: {
+          action?: string
+          approved_at?: string
+          approved_by?: string
+          id?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_approvals_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
@@ -373,6 +485,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      payments_audit: {
+        Row: {
+          id: string
+          new_data: Json | null
+          note: string | null
+          old_data: Json | null
+          operation: string
+          payment_id: string
+          performed_at: string
+          performed_by: string | null
+        }
+        Insert: {
+          id?: string
+          new_data?: Json | null
+          note?: string | null
+          old_data?: Json | null
+          operation: string
+          payment_id: string
+          performed_at?: string
+          performed_by?: string | null
+        }
+        Update: {
+          id?: string
+          new_data?: Json | null
+          note?: string | null
+          old_data?: Json | null
+          operation?: string
+          payment_id?: string
+          performed_at?: string
+          performed_by?: string | null
+        }
+        Relationships: []
       }
       products: {
         Row: {
@@ -466,18 +611,12 @@ export type Database = {
         Args: { approver_id: string; edit_id: string }
         Returns: undefined
       }
-      get_auth_uid: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      get_user_role: {
-        Args: { user_uuid: string }
-        Returns: string
-      }
-      mark_overdue_payments: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      get_auth_uid: { Args: never; Returns: string }
+      get_user_role: { Args: { user_uuid: string }; Returns: string }
+      mark_overdue_payments: { Args: never; Returns: undefined }
+      user_can_view_delivery:
+        | { Args: { p_delivery: string; p_user: string }; Returns: boolean }
+        | { Args: { p_delivery_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "MasterAdmin" | "Admin" | "Customer"
