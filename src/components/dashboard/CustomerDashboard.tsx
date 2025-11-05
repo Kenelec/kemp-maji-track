@@ -17,6 +17,9 @@ import {
   X
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { CustomerPaymentsSection } from "./sections/CustomerPaymentsSection";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CustomerDashboardProps {
   onLogout: () => void;
@@ -27,6 +30,32 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
   const [activeTab, setActiveTab] = useState("overview");
   const [mpesaCode, setMpesaCode] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Fetch customer stats
+  const { data: deliveriesCount } = useQuery({
+    queryKey: ["customer-deliveries-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("deliveries")
+        .select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  const { data: pendingPayments } = useQuery({
+    queryKey: ["customer-pending-payments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*")
+        .in("status", ["pending", "overdue"]);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const totalPending = pendingPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
 
   const handleLogout = async () => {
     await signOut();
@@ -141,9 +170,9 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                     <Truck className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-xl md:text-2xl font-bold">0</div>
+                    <div className="text-xl md:text-2xl font-bold">{deliveriesCount || 0}</div>
                     <p className="text-xs text-muted-foreground">
-                      +0% from last month
+                      All time deliveries
                     </p>
                   </CardContent>
                 </Card>
@@ -154,9 +183,9 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-xl md:text-2xl font-bold">KSh 0</div>
+                    <div className="text-xl md:text-2xl font-bold">KSh {totalPending.toLocaleString()}</div>
                     <p className="text-xs text-muted-foreground">
-                      0 pending payments
+                      {pendingPayments?.length || 0} pending payment{pendingPayments?.length !== 1 ? "s" : ""}
                     </p>
                   </CardContent>
                 </Card>
@@ -207,19 +236,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                 <p className="text-sm md:text-muted-foreground">Manage your payment history and pending payments</p>
               </div>
               
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment History</CardTitle>
-                  <CardDescription>
-                    View and manage your payments
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    No payments found. Your payment history will appear here.
-                  </div>
-                </CardContent>
-              </Card>
+              <CustomerPaymentsSection />
 
               <Card>
                 <CardHeader>

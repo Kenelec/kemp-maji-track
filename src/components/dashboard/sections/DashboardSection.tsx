@@ -5,10 +5,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState } from "react";
 import { Users, Truck, DollarSign, AlertCircle, CreditCard } from "lucide-react";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from "date-fns";
+import { OverduePaymentsDialog } from "./OverduePaymentsDialog";
 
 export function DashboardSection() {
   const [deliveryPeriod, setDeliveryPeriod] = useState("today");
   const [paymentPeriod, setPaymentPeriod] = useState("today");
+  const [overdueDialogOpen, setOverdueDialogOpen] = useState(false);
 
   const getDateRange = (period: string) => {
     const now = new Date();
@@ -186,13 +188,16 @@ export function DashboardSection() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setOverdueDialogOpen(true)}
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-destructive" />
               Payments Overdue
             </CardTitle>
-            <CardDescription>Payments requiring attention</CardDescription>
+            <CardDescription>Payments requiring attention • Click to view details</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold text-destructive">KSh {overdueTotal.toLocaleString()}</div>
@@ -201,6 +206,11 @@ export function DashboardSection() {
           </CardContent>
         </Card>
       </div>
+
+      <OverduePaymentsDialog 
+        open={overdueDialogOpen}
+        onOpenChange={setOverdueDialogOpen}
+      />
     </div>
   );
 }
