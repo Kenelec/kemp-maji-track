@@ -189,6 +189,12 @@ export type Database = {
           delivery_note_no: string | null
           delivery_status: string | null
           id: string
+          last_reminder_sent_at: string | null
+          mpesa_transaction_id: string | null
+          payment_date: string | null
+          payment_link_token: string | null
+          payment_reminder_sent: boolean | null
+          payment_status: string | null
           qty: number
           total_amount: number
           unit_rate: number
@@ -201,6 +207,12 @@ export type Database = {
           delivery_note_no?: string | null
           delivery_status?: string | null
           id?: string
+          last_reminder_sent_at?: string | null
+          mpesa_transaction_id?: string | null
+          payment_date?: string | null
+          payment_link_token?: string | null
+          payment_reminder_sent?: boolean | null
+          payment_status?: string | null
           qty: number
           total_amount: number
           unit_rate: number
@@ -213,6 +225,12 @@ export type Database = {
           delivery_note_no?: string | null
           delivery_status?: string | null
           id?: string
+          last_reminder_sent_at?: string | null
+          mpesa_transaction_id?: string | null
+          payment_date?: string | null
+          payment_link_token?: string | null
+          payment_reminder_sent?: boolean | null
+          payment_status?: string | null
           qty?: number
           total_amount?: number
           unit_rate?: number
@@ -611,6 +629,7 @@ export type Database = {
         Args: { approver_id: string; edit_id: string }
         Returns: undefined
       }
+      generate_payment_token: { Args: never; Returns: string }
       get_auth_uid: { Args: never; Returns: string }
       get_user_role: { Args: { user_uuid: string }; Returns: string }
       mark_overdue_payments: { Args: never; Returns: undefined }
