@@ -1,1 +1,13 @@
 project_id = "lguzfxcefsnmwrfjhzfb"
+
+[functions.check-unpaid-deliveries]
+verify_jwt = true
+
+[functions.send-payment-reminder]
+verify_jwt = true
+
+[functions.initiate-mpesa-payment]
+verify_jwt = false
+
+[functions.mpesa-webhook]
+verify_jwt = false
