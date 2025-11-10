@@ -202,6 +202,17 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
           }]);
         
         if (itemsError) throw itemsError;
+
+        // Send delivery confirmation notification
+        try {
+          await supabase.functions.invoke('send-delivery-confirmation', {
+            body: { delivery_id: deliveryData.id }
+          });
+          console.log('Delivery confirmation sent');
+        } catch (notifError) {
+          console.error('Failed to send delivery confirmation:', notifError);
+          // Don't throw - delivery was created successfully
+        }
       }
     },
     onSuccess: () => {
@@ -210,7 +221,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         title: editData ? "Delivery updated" : "Delivery created",
         description: editData 
           ? "Delivery has been updated successfully."
-          : "New delivery has been scheduled successfully.",
+          : "New delivery created and confirmation sent to customer.",
       });
       onOpenChange(false);
       form.reset();

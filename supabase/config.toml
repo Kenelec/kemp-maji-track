@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.mpesa-webhook]
 verify_jwt = false
+
+[functions.send-delivery-confirmation]
+verify_jwt = true
+
+[functions.submit-delivery-query]
+verify_jwt = false

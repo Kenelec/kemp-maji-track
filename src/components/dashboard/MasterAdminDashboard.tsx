@@ -9,7 +9,8 @@ import {
   CreditCard, 
   Users, 
   Package, 
-  Download
+  Download,
+  Settings
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +19,7 @@ import { ProductsSection } from "./sections/ProductsSection";
 import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
 import { DashboardSection } from "./sections/DashboardSection";
+import { SystemSettingsSection } from "./sections/SystemSettingsSection";
 
 interface MasterAdminDashboardProps {
   onLogout: () => void;
@@ -38,6 +40,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
     { id: "payments", label: "Payments", icon: CreditCard },
     { id: "customers", label: "Customers", icon: Users },
     { id: "products", label: "Products", icon: Package },
+    { id: "settings", label: "Settings", icon: Settings },
     { id: "exports", label: "Exports", icon: Download },
   ];
 
@@ -99,6 +102,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           {activeTab === "payments" && <PaymentsSection />}
           {activeTab === "customers" && <CustomersSection />}
           {activeTab === "products" && <ProductsSection />}
+          {activeTab === "settings" && <SystemSettingsSection />}
 
           {activeTab === "exports" && (
             <div className="space-y-6">

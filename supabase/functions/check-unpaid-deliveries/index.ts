@@ -19,20 +19,30 @@ Deno.serve(async (req) => {
 
     console.log('Checking for unpaid deliveries...');
 
-    // Calculate the timestamp for 48 hours ago
-    const fortyEightHoursAgo = new Date();
-    fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
+    // Fetch configurable reminder duration from settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'payment_reminder_hours')
+      .single();
+
+    const reminderHours = settings?.setting_value?.hours || 48; // Default to 48 if not set
+    console.log(`Using reminder duration: ${reminderHours} hours`);
+
+    // Calculate the timestamp based on configurable hours
+    const reminderThreshold = new Date();
+    reminderThreshold.setHours(reminderThreshold.getHours() - reminderHours);
 
     // Calculate the timestamp for 24 hours ago (for reminder throttling)
     const twentyFourHoursAgo = new Date();
     twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
 
-    // Find unpaid deliveries older than 48 hours
+    // Find unpaid deliveries older than configured threshold
     const { data: unpaidDeliveries, error: fetchError } = await supabase
       .from('deliveries')
       .select('id, customer_id, total_amount, delivery_date, payment_reminder_sent, last_reminder_sent_at')
       .eq('payment_status', 'unpaid')
-      .lte('delivery_date', fortyEightHoursAgo.toISOString().split('T')[0])
+      .lte('delivery_date', reminderThreshold.toISOString().split('T')[0])
       .or(`payment_reminder_sent.is.null,payment_reminder_sent.eq.false,last_reminder_sent_at.lt.${twentyFourHoursAgo.toISOString()}`);
 
     if (fetchError) {
