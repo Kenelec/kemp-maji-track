@@ -18,6 +18,7 @@ import { ProductsSection } from "./sections/ProductsSection";
 import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -26,6 +27,9 @@ interface AdminDashboardProps {
 const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("deliveries");
+  
+  // Enable real-time payment notifications
+  usePaymentNotifications(user?.id);
 
   const handleLogout = async () => {
     await signOut();

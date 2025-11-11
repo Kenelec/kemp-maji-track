@@ -114,6 +114,7 @@ export type Database = {
           customer_name: string
           email: string | null
           id: string
+          notification_preference: string | null
           phone: string | null
           user_id: string | null
         }
@@ -124,6 +125,7 @@ export type Database = {
           customer_name: string
           email?: string | null
           id?: string
+          notification_preference?: string | null
           phone?: string | null
           user_id?: string | null
         }
@@ -134,6 +136,7 @@ export type Database = {
           customer_name?: string
           email?: string | null
           id?: string
+          notification_preference?: string | null
           phone?: string | null
           user_id?: string | null
         }

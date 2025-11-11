@@ -85,8 +85,14 @@ Deno.serve(async (req) => {
       amount: delivery.total_amount
     });
 
-    // Send SMS via Africa's Talking
-    const smsResponse = await fetch('https://api.africastalking.com/version1/messaging', {
+    // Try WhatsApp first, fallback to SMS
+    let notificationChannel = 'whatsapp';
+    let notificationSuccess = false;
+    let notificationRef = '';
+
+    // Attempt WhatsApp delivery
+    console.log('Attempting WhatsApp delivery for payment reminder...');
+    const whatsappResponse = await fetch('https://api.africastalking.com/version1/messaging', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -100,21 +106,50 @@ Deno.serve(async (req) => {
       })
     });
 
-    const smsData = await smsResponse.json();
-    console.log('SMS API response:', smsData);
+    const whatsappData = await whatsappResponse.json();
+    console.log('WhatsApp API response:', whatsappData);
 
-    const success = smsData.SMSMessageData?.Recipients?.[0]?.status === 'Success';
+    // Check if WhatsApp succeeded
+    if (whatsappData.SMSMessageData?.Recipients?.[0]?.status === 'Success') {
+      notificationSuccess = true;
+      notificationRef = whatsappData.SMSMessageData?.Recipients?.[0]?.messageId;
+      console.log('WhatsApp reminder sent successfully');
+    } else {
+      // Fallback to SMS
+      console.log('WhatsApp failed, falling back to SMS...');
+      notificationChannel = 'sms';
+      
+      const smsResponse = await fetch('https://api.africastalking.com/version1/messaging', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'apiKey': Deno.env.get('AFRICASTALKING_API_KEY') ?? '',
+        'Accept': 'application/json'
+      },
+        body: new URLSearchParams({
+          username: Deno.env.get('AFRICASTALKING_USERNAME') ?? '',
+          to: phoneNumber,
+          message: message
+        })
+      });
 
-    // Log notification
+      const smsData = await smsResponse.json();
+      console.log('SMS API response:', smsData);
+
+      notificationSuccess = smsData.SMSMessageData?.Recipients?.[0]?.status === 'Success';
+      notificationRef = smsData.SMSMessageData?.Recipients?.[0]?.messageId;
+    }
+
+    // Log notification (WhatsApp or SMS)
     await supabase.from('notifications_log').insert({
       user_id: customer.user_id,
-      channel: 'sms',
+      channel: notificationChannel,
       content: message,
-      status: success ? 'delivered' : 'failed',
-      provider_ref: smsData.SMSMessageData?.Recipients?.[0]?.messageId
+      status: notificationSuccess ? 'delivered' : 'failed',
+      provider_ref: notificationRef
     });
 
-    if (success) {
+    if (notificationSuccess) {
       // Update delivery reminder status
       await supabase
         .from('deliveries')
@@ -127,9 +162,11 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ 
-        success,
-        message: success ? 'Payment reminder sent successfully' : 'Failed to send reminder',
-        smsData
+        success: notificationSuccess,
+        channel: notificationChannel,
+        message: notificationSuccess 
+          ? `Payment reminder sent successfully via ${notificationChannel}` 
+          : 'Failed to send reminder',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

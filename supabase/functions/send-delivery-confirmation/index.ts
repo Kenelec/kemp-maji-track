@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
       email: null as any
     };
 
-    // Send SMS if phone available
+    // Send notification via WhatsApp first, fallback to SMS
     if (customer.phone) {
       let phoneNumber = customer.phone.trim();
       if (phoneNumber.startsWith('0')) {
@@ -103,8 +103,14 @@ Deno.serve(async (req) => {
         phoneNumber = '+254' + phoneNumber;
       }
 
+      let notificationChannel = 'whatsapp';
+      let notificationSuccess = false;
+      let notificationRef = '';
+
       try {
-        const smsResponse = await fetch('https://api.africastalking.com/version1/messaging', {
+        // Try WhatsApp first
+        console.log('Attempting WhatsApp delivery confirmation...');
+        const whatsappResponse = await fetch('https://api.africastalking.com/version1/messaging', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -118,19 +124,52 @@ Deno.serve(async (req) => {
           })
         });
 
-        results.sms = await smsResponse.json();
-        console.log('SMS sent:', results.sms);
+        const whatsappData = await whatsappResponse.json();
+        console.log('WhatsApp API response:', whatsappData);
 
-        // Log SMS notification
+        // Check if WhatsApp succeeded
+        if (whatsappData.SMSMessageData?.Recipients?.[0]?.status === 'Success') {
+          notificationSuccess = true;
+          notificationRef = whatsappData.SMSMessageData?.Recipients?.[0]?.messageId;
+          results.sms = whatsappData;
+          console.log('WhatsApp delivery confirmation sent successfully');
+        } else {
+          // Fallback to SMS
+          console.log('WhatsApp failed, falling back to SMS...');
+          notificationChannel = 'sms';
+          
+          const smsResponse = await fetch('https://api.africastalking.com/version1/messaging', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'apiKey': Deno.env.get('AFRICASTALKING_API_KEY') ?? '',
+              'Accept': 'application/json'
+            },
+            body: new URLSearchParams({
+              username: Deno.env.get('AFRICASTALKING_USERNAME') ?? '',
+              to: phoneNumber,
+              message: smsMessage
+            })
+          });
+
+          const smsData = await smsResponse.json();
+          console.log('SMS API response:', smsData);
+
+          notificationSuccess = smsData.SMSMessageData?.Recipients?.[0]?.status === 'Success';
+          notificationRef = smsData.SMSMessageData?.Recipients?.[0]?.messageId;
+          results.sms = smsData;
+        }
+
+        // Log notification (WhatsApp or SMS)
         await supabase.from('notifications_log').insert({
           user_id: customer.user_id,
-          channel: 'sms',
+          channel: notificationChannel,
           content: smsMessage,
-          status: results.sms.SMSMessageData?.Recipients?.[0]?.status === 'Success' ? 'delivered' : 'failed',
-          provider_ref: results.sms.SMSMessageData?.Recipients?.[0]?.messageId
+          status: notificationSuccess ? 'delivered' : 'failed',
+          provider_ref: notificationRef
         });
       } catch (error) {
-        console.error('SMS error:', error);
+        console.error('Notification error:', error);
         results.sms = { error: error instanceof Error ? error.message : 'Unknown error' };
       }
     }

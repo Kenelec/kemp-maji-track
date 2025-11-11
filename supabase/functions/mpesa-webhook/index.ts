@@ -47,6 +47,20 @@ Deno.serve(async (req) => {
     const deliveryId = callback.requestMetadata.delivery_id;
 
     if (callback.status === 'Success') {
+      // Fetch delivery with customer details first
+      const { data: delivery, error: fetchError } = await supabase
+        .from('deliveries')
+        .select('customer_id, total_amount, customers!inner(user_id, customer_name)')
+        .eq('id', deliveryId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching delivery:', fetchError);
+        throw fetchError;
+      }
+
+      const customer = Array.isArray(delivery.customers) ? delivery.customers[0] : delivery.customers;
+
       // Update delivery to paid status
       const { error: updateError } = await supabase
         .from('deliveries')
@@ -64,21 +78,14 @@ Deno.serve(async (req) => {
 
       console.log(`Delivery ${deliveryId} marked as paid with transaction ${callback.transactionId}`);
 
-      // Log successful payment notification
-      const { data: delivery } = await supabase
-        .from('deliveries')
-        .select('customer_id')
-        .eq('id', deliveryId)
-        .single();
-
-      if (delivery) {
-        await supabase.from('notifications_log').insert({
-          user_id: delivery.customer_id,
-          channel: 'mpesa',
-          content: `Payment received: ${callback.transactionId}`,
-          status: 'delivered'
-        });
-      }
+      // Log successful payment notification with customer details
+      await supabase.from('notifications_log').insert({
+        user_id: customer.user_id,
+        channel: 'mpesa',
+        content: `Payment received: KES ${delivery.total_amount} from ${customer.customer_name} - Transaction: ${callback.transactionId}`,
+        status: 'delivered',
+        provider_ref: callback.transactionId
+      });
 
     } else if (callback.status === 'Failed') {
       console.log(`Payment failed for delivery ${deliveryId}`);
@@ -86,13 +93,14 @@ Deno.serve(async (req) => {
       // Log failed payment attempt
       const { data: delivery } = await supabase
         .from('deliveries')
-        .select('customer_id')
+        .select('customer_id, customers!inner(user_id)')
         .eq('id', deliveryId)
         .single();
 
       if (delivery) {
+        const customer = Array.isArray(delivery.customers) ? delivery.customers[0] : delivery.customers;
         await supabase.from('notifications_log').insert({
-          user_id: delivery.customer_id,
+          user_id: customer.user_id,
           channel: 'mpesa',
           content: 'Payment failed. Please try again.',
           status: 'failed'

@@ -20,6 +20,7 @@ import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
 import { DashboardSection } from "./sections/DashboardSection";
 import { SystemSettingsSection } from "./sections/SystemSettingsSection";
+import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 
 interface MasterAdminDashboardProps {
   onLogout: () => void;
@@ -28,6 +29,9 @@ interface MasterAdminDashboardProps {
 const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
   const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
+  
+  // Enable real-time payment notifications
+  usePaymentNotifications(user?.id);
 
   const handleLogout = async () => {
     await signOut();
