@@ -71,7 +71,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       if (customersError) throw customersError;
 
       // Fetch deliveries
-      const {  deliveriesData, error: deliveriesError } = await supabase
+      const { data: deliveriesData, error: deliveriesError } = await supabase
         .from('deliveries')
         .select('id, delivery_date, total_amount, qty, unit_rate, customer_id')
         .order('delivery_date', { ascending: false });
@@ -81,7 +81,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       setCustomers(customersData || []);
       setDeliveries(deliveriesData || []);
     } catch (error) {
-      console.error('Error fetching form ', error);
+      console.error('Error fetching form data', error);
     }
   };
 
