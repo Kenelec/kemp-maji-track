@@ -183,93 +183,76 @@ export type Database = {
         }
         Relationships: []
       }
-      deliveries: {
-  Row: {
-    created_at: string | null
-    created_by_user: string
-    customer_id: string
-    delivery_date: string
-    delivery_note_no: string | null
-    delivery_status: string | null
-    id: string
-    last_reminder_sent_at: string | null
-    mpesa_transaction_id: string | null
-    payment_date: string | null
-    payment_link_token: string | null
-    payment_reminder_sent: boolean | null
-    payment_status: string | null
-    qty: number
-    total_amount: number
-    unit_rate: number
-    discrepancy_flag: boolean | null
-    discrepancy_notes: string | null
-    discrepancy_resolved: boolean | null
-    discrepancy_resolved_by: string | null
-    discrepancy_resolved_at: string | null
-  }
-  Insert: {
-    created_at?: string | null
-    created_by_user: string
-    customer_id: string
-    delivery_date: string
-    delivery_note_no?: string | null
-    delivery_status?: string | null
-    id?: string
-    last_reminder_sent_at?: string | null
-    mpesa_transaction_id?: string | null
-    payment_date?: string | null
-    payment_link_token?: string | null
-    payment_reminder_sent?: boolean | null
-    payment_status?: string | null
-    qty: number
-    total_amount: number
-    unit_rate: number
-    discrepancy_flag?: boolean | null
-    discrepancy_notes?: string | null
-    discrepancy_resolved?: boolean | null
-    discrepancy_resolved_by?: string | null
-    discrepancy_resolved_at?: string | null
-  }
-  Update: {
-    created_at?: string | null
-    created_by_user?: string
-    customer_id?: string
-    delivery_date?: string
-    delivery_note_no?: string | null
-    delivery_status?: string | null
-    id?: string
-    last_reminder_sent_at?: string | null
-    mpesa_transaction_id?: string | null
-    payment_date?: string | null
-    payment_link_token?: string | null
-    payment_reminder_sent?: boolean | null
-    payment_status?: string | null
-    qty?: number
-    total_amount?: number
-    unit_rate?: number
-    discrepancy_flag?: boolean | null
-    discrepancy_notes?: string | null
-    discrepancy_resolved?: boolean | null
-    discrepancy_resolved_by?: string | null
-    discrepancy_resolved_at?: string | null
-  }
-  Relationships: [
-    {
-      foreignKeyName: "deliveries_created_by_user_fkey"
-      columns: ["created_by_user"]
-      isOneToOne: false
-      referencedRelation: "users"
-      referencedColumns: ["id"]
-    },
-    {
-      foreignKeyName: "deliveries_customer_id_fkey"
-      columns: ["customer_id"]
-      isOneToOne: false
-      referencedRelation: "customers"
-      referencedColumns: ["id"]
-    }
-  ]
-}
+            deliveries: {
+        Row: {
+          created_at: string | null
+          created_by_user: string
+          customer_id: string
+          delivery_date: string
+          delivery_note_no: string | null
+          delivery_status: string | null
+          id: string
+          last_reminder_sent_at: string | null
+          mpesa_transaction_id: string | null
+          payment_date: string | null
+          payment_link_token: string | null
+          payment_reminder_sent: boolean | null
+          payment_status: string | null
+          qty: number
+          total_amount: number
+          unit_rate: number
+          discrepancy_flag: boolean | null
+          discrepancy_notes: string | null
+          discrepancy_resolved: boolean | null
+          discrepancy_resolved_by: string | null
+          discrepancy_resolved_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by_user: string
+          customer_id: string
+          delivery_date: string
+          delivery_note_no?: string | null
+          delivery_status?: string | null
+          id?: string
+          last_reminder_sent_at?: string | null
+          mpesa_transaction_id?: string | null
+          payment_date?: string | null
+          payment_link_token?: string | null
+          payment_reminder_sent?: boolean | null
+          payment_status?: string | null
+          qty: number
+          total_amount: number
+          unit_rate: number
+          discrepancy_flag?: boolean | null
+          discrepancy_notes?: string | null
+          discrepancy_resolved?: boolean | null
+          discrepancy_resolved_by?: string | null
+          discrepancy_resolved_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by_user?: string
+          customer_id?: string
+          delivery_date?: string
+          delivery_note_no?: string | null
+          delivery_status?: string | null
+          id?: string
+          last_reminder_sent_at?: string | null
+          mpesa_transaction_id?: string | null
+          payment_date?: string | null
+          payment_link_token?: string | null
+          payment_reminder_sent?: boolean | null
+          payment_status?: string | null
+          qty?: number
+          total_amount?: number
+          unit_rate?: number
+          discrepancy_flag?: boolean | null
+          discrepancy_notes?: string | null
+          discrepancy_resolved?: boolean | null
+          discrepancy_resolved_by?: string | null
+          discrepancy_resolved_at?: string | null
+        }
         Relationships: [
           {
             foreignKeyName: "deliveries_created_by_user_fkey"
@@ -287,7 +270,7 @@ export type Database = {
           },
         ]
       }
-      delivery_acl: {
+          delivery_acl: {
         Row: {
           created_at: string | null
           delivery_id: string
