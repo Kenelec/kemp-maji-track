@@ -254,6 +254,361 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
     }
   };
 
+  const renderContent = () => {
+    switch (activeTab) {
+      case "approvals":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Approval Dashboard</h2>
+              <p className="text-muted-foreground">Review and approve requests from Admins and Customers</p>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                <p>Loading approval requests...</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Admin Approval Requests */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Admin Approval Requests</CardTitle>
+                    <CardDescription>
+                      Requests from Admin users requiring your approval
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {approvalRequests.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No pending admin approval requests
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {approvalRequests.filter(r => r.status === 'pending').map((request) => (
+                          <Card key={request.id} className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center space-x-3">
+                                {getRequestIcon(request.request_type)}
+                                <div>
+                                  <h3 className="font-medium">
+                                    {request.request_type.replace('_', ' ')} Request
+                                  </h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    From: {request.requested_by}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Target: {request.target_table} - ID: {request.target_id}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                {getStatusBadge(request.status)}
+                              </div>
+                            </div>
+                            {request.admin_notes && (
+                              <div className="mt-2 p-2 bg-muted rounded text-sm">
+                                <strong>Notes:</strong> {request.admin_notes}
+                              </div>
+                            )}
+                            {request.status === 'pending' && (
+                              <div className="flex space-x-2 mt-3">
+                                <Button 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => approveRequest(request.id, 'admin_approval_requests', request.id, {
+                                    target_table: request.target_table,
+                                    target_id: request.target_id,
+                                    requested_changes: request.requested_changes
+                                  })}
+                                >
+                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  Approve
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => rejectRequest(request.id, 'admin_approval_requests', request.id, 'Not approved')}
+                                >
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Customer Queries */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Customer Queries & Discrepancies</CardTitle>
+                    <CardDescription>
+                      Queries raised by customers requiring your attention
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {deliveryQueries.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No pending customer queries
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {deliveryQueries.filter(q => q.status === 'open').map((query) => (
+                          <Card key={query.id} className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center space-x-3">
+                                <MessageCircle className="w-4 h-4 text-blue-600" />
+                                <div>
+                                  <h3 className="font-medium">
+                                    Query: {query.query_type}
+                                  </h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    From: Customer ID {query.customer_id}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Delivery ID: {query.delivery_id}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                {query.status === 'open' ? (
+                                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                                    <Clock className="w-3 h-3 mr-1" /> Open
+                                  </Badge>
+                                ) : query.status === 'resolved' ? (
+                                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Resolved
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="bg-red-100 text-red-800">
+                                    <XCircle className="w-3 h-3 mr-1" /> Rejected
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <p className="text-sm"><strong>Message:</strong> {query.message}</p>
+                              {query.admin_resolution_notes && (
+                                <p className="text-sm mt-1"><strong>Admin Notes:</strong> {query.admin_resolution_notes}</p>
+                              )}
+                              {query.resolution_note && (
+                                <p className="text-sm mt-1"><strong>Resolution:</strong> {query.resolution_note}</p>
+                              )}
+                            </div>
+                            {query.status === 'open' && (
+                              <div className="flex space-x-2 mt-3">
+                                <Button 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => approveRequest(query.id, 'delivery_queries', query.id, null)}
+                                >
+                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  Resolve
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => rejectRequest(query.id, 'delivery_queries', query.id, 'Query rejected')}
+                                >
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        );
+      case "dashboard":
+        return <DashboardSection />;
+      case "deliveries":
+        return <DeliveriesSection />;
+      case "payments":
+        return <PaymentsSection />;
+      case "customers":
+        return <CustomersSection />;
+      case "products":
+        return <ProductsSection />;
+      case "settings":
+        return <SystemSettingsSection />;
+      case "exports":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Export Data</h2>
+              <p className="text-muted-foreground">Download reports and data exports</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Deliveries Report</CardTitle>
+                  <CardDescription>Export delivery data with filters</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={async () => {
+                      const { data, error } = await supabase.from("deliveries").select("*, customers(customer_name)");
+                      if (error) return;
+                      const csv = [
+                        ["Customer", "Date", "Quantity", "Unit Rate", "Total", "Status"],
+                        ...data.map(d => [
+                          d.customers?.customer_name || "",
+                          d.delivery_date,
+                          d.qty,
+                          d.unit_rate,
+                          d.total_amount,
+                          d.delivery_status
+                        ])
+                      ].map(row => row.join(",")).join("\n");
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "deliveries.csv";
+                      a.click();
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </Button>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payments Report</CardTitle>
+                  <CardDescription>Export payment records</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={async () => {
+                      const { data, error } = await supabase
+                        .from("payments")
+                        .select(`*, customers(customer_name), deliveries(total_amount)`);
+                      if (error || !data) return;
+
+                      // Build derived status per payment using cumulative sums per delivery
+                      const byDelivery = new Map<string, any[]>();
+                      data.forEach((p: any) => {
+                        const key = p.delivery_id || `no-delivery-${p.id}`;
+                        const arr = byDelivery.get(key) || [];
+                        arr.push(p);
+                        byDelivery.set(key, arr);
+                      });
+
+                      const statusById = new Map<string, string>();
+                      byDelivery.forEach((arr) => {
+                        arr.sort((a: any, b: any) => {
+                          const at = new Date(a.created_at || a.due_date || 0).getTime();
+                          const bt = new Date(b.created_at || b.due_date || 0).getTime();
+                          if (at !== bt) return at - bt;
+                          return String(a.id).localeCompare(String(b.id));
+                        });
+                        const deliveryTotal = arr[0]?.deliveries?.total_amount ? Number(arr[0].deliveries.total_amount) : 0;
+                        let running = 0;
+                        arr.forEach((p: any) => {
+                          running += Number(p.amount || 0);
+                          const diff = running - deliveryTotal;
+                          let label: string;
+                          if (deliveryTotal === 0) {
+                            label = p.status;
+                          } else if (diff > 0) {
+                            label = `${Math.abs(diff)} credit`;
+                          } else if (diff < 0) {
+                            label = `${Math.abs(diff)} pending`;
+                          } else {
+                            label = "paid";
+                          }
+                          statusById.set(p.id, label);
+                        });
+                      });
+
+                      const rows = data.map((p: any) => [
+                        p.customers?.customer_name || "",
+                        Number(p.amount || 0),
+                        p.due_date,
+                        p.payment_method,
+                        p.mpesa_code || "",
+                        statusById.get(p.id) || p.status,
+                      ]);
+
+                      const csv = [["Customer", "Amount", "Due Date", "Method", "M-Pesa Code", "Status"], ...rows]
+                        .map((row) => row.join(","))
+                        .join("\n");
+
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "payments.csv";
+                      a.click();
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </Button>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Customers Report</CardTitle>
+                  <CardDescription>Export customer database</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={async () => {
+                      const { data, error } = await supabase.from("customers").select("*");
+                      if (error) return;
+                      const csv = [
+                        ["Name", "Phone", "Email", "Area", "Address"],
+                        ...data.map(c => [
+                          c.customer_name,
+                          c.phone || "",
+                          c.email || "",
+                          c.area || "",
+                          c.address || ""
+                        ])
+                      ].map(row => row.join(",")).join("\n");
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "customers.csv";
+                      a.click();
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        );
+      default:
+        return <DashboardSection />;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -307,346 +662,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
 
         {/* Main Content */}
         <main className="flex-1 p-6">
-          {activeTab === "approvals" ? (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Approval Dashboard</h2>
-                <p className="text-muted-foreground">Review and approve requests from Admins and Customers</p>
-              </div>
-
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p>Loading approval requests...</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Admin Approval Requests */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Admin Approval Requests</CardTitle>
-                      <CardDescription>
-                        Requests from Admin users requiring your approval
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {approvalRequests.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          No pending admin approval requests
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {approvalRequests.filter(r => r.status === 'pending').map((request) => (
-                            <Card key={request.id} className="p-4">
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-center space-x-3">
-                                  {getRequestIcon(request.request_type)}
-                                  <div>
-                                    <h3 className="font-medium">
-                                      {request.request_type.replace('_', ' ')} Request
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground">
-                                      From: {request.requested_by}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                      Target: {request.target_table} - ID: {request.target_id}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  {getStatusBadge(request.status)}
-                                </div>
-                              </div>
-                              {request.admin_notes && (
-                                <div className="mt-2 p-2 bg-muted rounded text-sm">
-                                  <strong>Notes:</strong> {request.admin_notes}
-                                </div>
-                              )}
-                              {request.status === 'pending' && (
-                                <div className="flex space-x-2 mt-3">
-                                  <Button 
-                                    size="sm" 
-                                    className="bg-green-600 hover:bg-green-700"
-                                    onClick={() => approveRequest(request.id, 'admin_approval_requests', request.id, {
-                                      target_table: request.target_table,
-                                      target_id: request.target_id,
-                                      requested_changes: request.requested_changes
-                                    })}
-                                  >
-                                    <CheckCircle2 className="w-4 h-4 mr-1" />
-                                    Approve
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    onClick={() => rejectRequest(request.id, 'admin_approval_requests', request.id, 'Not approved')}
-                                  >
-                                    <XCircle className="w-4 h-4 mr-1" />
-                                    Reject
-                                  </Button>
-                                </div>
-                              )}
-                            </Card>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Customer Queries */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Customer Queries & Discrepancies</CardTitle>
-                      <CardDescription>
-                        Queries raised by customers requiring your attention
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {deliveryQueries.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          No pending customer queries
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {deliveryQueries.filter(q => q.status === 'open').map((query) => (
-                            <Card key={query.id} className="p-4">
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-center space-x-3">
-                                  <MessageCircle className="w-4 h-4 text-blue-600" />
-                                  <div>
-                                    <h3 className="font-medium">
-                                      Query: {query.query_type}
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground">
-                                      From: Customer ID {query.customer_id}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                      Delivery ID: {query.delivery_id}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  {query.status === 'open' ? (
-                                    <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                                      <Clock className="w-3 h-3 mr-1" /> Open
-                                    </Badge>
-                                  ) : query.status === 'resolved' ? (
-                                    <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                      <CheckCircle2 className="w-3 h-3 mr-1" /> Resolved
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="secondary" className="bg-red-100 text-red-800">
-                                      <XCircle className="w-3 h-3 mr-1" /> Rejected
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="mt-2">
-                                <p className="text-sm"><strong>Message:</strong> {query.message}</p>
-                                {query.admin_resolution_notes && (
-                                  <p className="text-sm mt-1"><strong>Admin Notes:</strong> {query.admin_resolution_notes}</p>
-                                )}
-                                {query.resolution_note && (
-                                  <p className="text-sm mt-1"><strong>Resolution:</strong> {query.resolution_note}</p>
-                                )}
-                              </div>
-                              {query.status === 'open' && (
-                                <div className="flex space-x-2 mt-3">
-                                  <Button 
-                                    size="sm" 
-                                    className="bg-green-600 hover:bg-green-700"
-                                    onClick={() => approveRequest(query.id, 'delivery_queries', query.id, null)}
-                                  >
-                                    <CheckCircle2 className="w-4 h-4 mr-1" />
-                                    Resolve
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    onClick={() => rejectRequest(query.id, 'delivery_queries', query.id, 'Query rejected')}
-                                  >
-                                    <XCircle className="w-4 h-4 mr-1" />
-                                    Reject
-                                  </Button>
-                                </div>
-                              )}
-                            </Card>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </div>
-          ) : activeTab === "dashboard" && <DashboardSection />,
-          activeTab === "deliveries" && <DeliveriesSection />,
-          activeTab === "payments" && <PaymentsSection />,
-          activeTab === "customers" && <CustomersSection />,
-          activeTab === "products" && <ProductsSection />,
-          activeTab === "settings" && <SystemSettingsSection />,
-
-          activeTab === "exports" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Export Data</h2>
-                <p className="text-muted-foreground">Download reports and data exports</p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Deliveries Report</CardTitle>
-                    <CardDescription>Export delivery data with filters</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={async () => {
-                        const { data, error } = await supabase.from("deliveries").select("*, customers(customer_name)");
-                        if (error) return;
-                        const csv = [
-                          ["Customer", "Date", "Quantity", "Unit Rate", "Total", "Status"],
-                          ...data.map(d => [
-                            d.customers?.customer_name || "",
-                            d.delivery_date,
-                            d.qty,
-                            d.unit_rate,
-                            d.total_amount,
-                            d.delivery_status
-                          ])
-                        ].map(row => row.join(",")).join("\n");
-                        const blob = new Blob([csv], { type: "text/csv" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = "deliveries.csv";
-                        a.click();
-                      }}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Payments Report</CardTitle>
-                    <CardDescription>Export payment records</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={async () => {
-                        const { data, error } = await supabase
-                          .from("payments")
-                          .select(`*, customers(customer_name), deliveries(total_amount)`);
-                        if (error || !data) return;
-
-                        // Build derived status per payment using cumulative sums per delivery
-                        const byDelivery = new Map<string, any[]>();
-                        data.forEach((p: any) => {
-                          const key = p.delivery_id || `no-delivery-${p.id}`;
-                          const arr = byDelivery.get(key) || [];
-                          arr.push(p);
-                          byDelivery.set(key, arr);
-                        });
-
-                        const statusById = new Map<string, string>();
-                        byDelivery.forEach((arr) => {
-                          arr.sort((a: any, b: any) => {
-                            const at = new Date(a.created_at || a.due_date || 0).getTime();
-                            const bt = new Date(b.created_at || b.due_date || 0).getTime();
-                            if (at !== bt) return at - bt;
-                            return String(a.id).localeCompare(String(b.id));
-                          });
-                          const deliveryTotal = arr[0]?.deliveries?.total_amount ? Number(arr[0].deliveries.total_amount) : 0;
-                          let running = 0;
-                          arr.forEach((p: any) => {
-                            running += Number(p.amount || 0);
-                            const diff = running - deliveryTotal;
-                            let label: string;
-                            if (deliveryTotal === 0) {
-                              label = p.status;
-                            } else if (diff > 0) {
-                              label = `${Math.abs(diff)} credit`;
-                            } else if (diff < 0) {
-                              label = `${Math.abs(diff)} pending`;
-                            } else {
-                              label = "paid";
-                            }
-                            statusById.set(p.id, label);
-                          });
-                        });
-
-                        const rows = data.map((p: any) => [
-                          p.customers?.customer_name || "",
-                          Number(p.amount || 0),
-                          p.due_date,
-                          p.payment_method,
-                          p.mpesa_code || "",
-                          statusById.get(p.id) || p.status,
-                        ]);
-
-                        const csv = [["Customer", "Amount", "Due Date", "Method", "M-Pesa Code", "Status"], ...rows]
-                          .map((row) => row.join(","))
-                          .join("\n");
-
-                        const blob = new Blob([csv], { type: "text/csv" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = "payments.csv";
-                        a.click();
-                      }}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Customers Report</CardTitle>
-                    <CardDescription>Export customer database</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={async () => {
-                        const { data, error } = await supabase.from("customers").select("*");
-                        if (error) return;
-                        const csv = [
-                          ["Name", "Phone", "Email", "Area", "Address"],
-                          ...data.map(c => [
-                            c.customer_name,
-                            c.phone || "",
-                            c.email || "",
-                            c.area || "",
-                            c.address || ""
-                          ])
-                        ].map(row => row.join(",")).join("\n");
-                        const blob = new Blob([csv], { type: "text/csv" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = "customers.csv";
-                        a.click();
-                      }}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
+          {renderContent()}
         </main>
       </div>
     </div>
