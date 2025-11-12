@@ -119,18 +119,11 @@ export function PaymentsSection() {
   });
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "bg-yellow-500/10 text-yellow-500";
-      case "paid":
-        return "bg-green-500/10 text-green-500";
-      case "overdue":
-        return "bg-red-500/10 text-red-500";
-      case "credit":
-        return "bg-blue-500/10 text-blue-500";
-      default:
-        return "bg-gray-500/10 text-gray-500";
-    }
+    if (status.includes('credit')) return "bg-blue-500/10 text-blue-500";
+    if (status.includes('pending')) return "bg-yellow-500/10 text-yellow-500";
+    if (status === 'paid') return "bg-green-500/10 text-green-500";
+    if (status === 'overdue') return "bg-red-500/10 text-red-500";
+    return "bg-gray-500/10 text-gray-500";
   };
 
   const derivedStatusById = useMemo(() => {
@@ -208,24 +201,24 @@ export function PaymentsSection() {
             </div>
           ) : (
             <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead>Qty</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Due Date</TableHead>
-                <TableHead>Payment Method</TableHead>
-                <TableHead>M-Pesa Code</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Products</TableHead>
+                  <TableHead>Qty</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead>Payment Method</TableHead>
+                  <TableHead>M-Pesa Code</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {payments.map((payment) => {
-                  const deliveryAmount = payment.deliveries?.total_amount ? Number(payment.deliveries.total_amount) : 0;
-                  const paymentAmount = Number(payment.amount);
-                  const difference = deliveryAmount - paymentAmount;
+                  const derived = derivedStatusById.get(payment.id);
+                  const type = derived?.type || payment.status;
+                  const label = derived?.label || payment.status;
                   
                   return (
                     <TableRow key={payment.id}>
@@ -255,20 +248,14 @@ export function PaymentsSection() {
                       <TableCell className="capitalize">{payment.payment_method}</TableCell>
                       <TableCell>{payment.mpesa_code || "—"}</TableCell>
                       <TableCell>
-                        {(() => {
-                          const derived = derivedStatusById.get(payment.id);
-                          const type = derived?.type || payment.status;
-                          const label = derived?.label || payment.status;
-                          return (
-                            <Badge className={getStatusColor(type)}>
-                              {label}
-                            </Badge>
-                          );
-                        })()}
+                        <Badge className={getStatusColor(type)}>
+                          {label}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {payment.status === "pending" && (
+                          {/* Only show Mark Paid button for pending payments */}
+                          {payment.status === "pending" && !label.includes('pending') && (
                             <Button
                               variant="ghost"
                               size="sm"
