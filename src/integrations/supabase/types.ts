@@ -26,6 +26,17 @@ export type Database = {
           status: string | null
           target_id: string
           target_table: string
+          admin_notes: string | null
+          approved_at: string | null
+          approved_by: string | null
+          rejection_reason: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          request_type: string | null
+          original_data: Json | null
+          requested_changes: Json | null
+          created_at: string | null
+          updated_at: string | null
         }
         Insert: {
           acted_at?: string | null
@@ -38,6 +49,17 @@ export type Database = {
           status?: string | null
           target_id: string
           target_table: string
+          admin_notes?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          request_type?: string | null
+          original_data?: Json | null
+          requested_changes?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
         }
         Update: {
           acted_at?: string | null
@@ -50,6 +72,17 @@ export type Database = {
           status?: string | null
           target_id?: string
           target_table?: string
+          admin_notes?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          rejection_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          request_type?: string | null
+          original_data?: Json | null
+          requested_changes?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -115,6 +148,7 @@ export type Database = {
           email: string | null
           id: string
           notification_preference: string | null
+          pending_approval: boolean | null
           phone: string | null
           user_id: string | null
         }
@@ -126,6 +160,7 @@ export type Database = {
           email?: string | null
           id?: string
           notification_preference?: string | null
+          pending_approval?: boolean | null
           phone?: string | null
           user_id?: string | null
         }
@@ -137,6 +172,7 @@ export type Database = {
           email?: string | null
           id?: string
           notification_preference?: string | null
+          pending_approval?: boolean | null
           phone?: string | null
           user_id?: string | null
         }
@@ -183,7 +219,7 @@ export type Database = {
         }
         Relationships: []
       }
-            deliveries: {
+      deliveries: {
         Row: {
           created_at: string | null
           created_by_user: string
@@ -198,6 +234,7 @@ export type Database = {
           payment_link_token: string | null
           payment_reminder_sent: boolean | null
           payment_status: string | null
+          pending_approval: boolean | null
           qty: number
           total_amount: number
           unit_rate: number
@@ -221,6 +258,7 @@ export type Database = {
           payment_link_token?: string | null
           payment_reminder_sent?: boolean | null
           payment_status?: string | null
+          pending_approval?: boolean | null
           qty: number
           total_amount: number
           unit_rate: number
@@ -244,6 +282,7 @@ export type Database = {
           payment_link_token?: string | null
           payment_reminder_sent?: boolean | null
           payment_status?: string | null
+          pending_approval?: boolean | null
           qty?: number
           total_amount?: number
           unit_rate?: number
@@ -270,7 +309,7 @@ export type Database = {
           },
         ]
       }
-          delivery_acl: {
+      delivery_acl: {
         Row: {
           created_at: string | null
           delivery_id: string
@@ -359,40 +398,64 @@ export type Database = {
       }
       delivery_queries: {
         Row: {
+          admin_resolution_notes: string | null
+          approval_request_id: string | null
           created_at: string | null
           customer_id: string
           delivery_id: string
           id: string
+          master_admin_approved: boolean | null
+          master_admin_approved_at: string | null
+          master_admin_approved_by: string | null
           message: string
           query_type: string
+          requires_approval: boolean | null
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
           status: string
+          admin_resolved_at: string | null
+          admin_resolved_by: string | null
         }
         Insert: {
+          admin_resolution_notes?: string | null
+          approval_request_id?: string | null
           created_at?: string | null
           customer_id: string
           delivery_id: string
           id?: string
+          master_admin_approved?: boolean | null
+          master_admin_approved_at?: string | null
+          master_admin_approved_by?: string | null
           message: string
           query_type: string
+          requires_approval?: boolean | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           status?: string
+          admin_resolved_at?: string | null
+          admin_resolved_by?: string | null
         }
         Update: {
+          admin_resolution_notes?: string | null
+          approval_request_id?: string | null
           created_at?: string | null
           customer_id?: string
           delivery_id?: string
           id?: string
+          master_admin_approved?: boolean | null
+          master_admin_approved_at?: string | null
+          master_admin_approved_by?: string | null
           message?: string
           query_type?: string
+          requires_approval?: boolean | null
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           status?: string
+          admin_resolved_at?: string | null
+          admin_resolved_by?: string | null
         }
         Relationships: [
           {
@@ -539,6 +602,7 @@ export type Database = {
           id: string
           mpesa_code: string | null
           payment_method: string | null
+          pending_approval: boolean | null
           status: string | null
           updated_at: string | null
         }
@@ -551,6 +615,7 @@ export type Database = {
           id?: string
           mpesa_code?: string | null
           payment_method?: string | null
+          pending_approval?: boolean | null
           status?: string | null
           updated_at?: string | null
         }
@@ -563,6 +628,7 @@ export type Database = {
           id?: string
           mpesa_code?: string | null
           payment_method?: string | null
+          pending_approval?: boolean | null
           status?: string | null
           updated_at?: string | null
         }
