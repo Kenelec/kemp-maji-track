@@ -81,7 +81,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       setCustomers(customersData || []);
       setDeliveries(deliveriesData || []);
     } catch (error) {
-      console.error('Error fetching form data:', error);
+      console.error('Error fetching form ', error);
     }
   };
 
