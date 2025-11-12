@@ -40,7 +40,7 @@ interface ApprovalRequest {
   request_type: string;
   target_id: string;
   target_table: string;
-  original_ any;
+  original_data: any;
   requested_changes: any;
   created_at: string;
   updated_at: string;
@@ -91,7 +91,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       setLoading(true);
 
       // Fetch admin approval requests
-      const {  requestsData, error: requestsError } = await supabase
+      const { data: requestsData, error: requestsError } = await supabase
         .from('admin_approval_requests')
         .select('*')
         .order('created_at', { ascending: false });
@@ -99,7 +99,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (requestsError) throw requestsError;
 
       // Fetch delivery queries
-      const {  queriesData, error: queriesError } = await supabase
+      const { data: queriesData, error: queriesError } = await supabase
         .from('delivery_queries')
         .select('*')
         .order('created_at', { ascending: false });
@@ -109,7 +109,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       setApprovalRequests(requestsData || []);
       setDeliveryQueries(queriesData || []);
     } catch (error) {
-      console.error('Error fetching approval ', error);
+      console.error('Error fetching approval data', error);
     } finally {
       setLoading(false);
     }
