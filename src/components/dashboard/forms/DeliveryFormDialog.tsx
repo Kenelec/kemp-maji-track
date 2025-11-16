@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { NotificationService } from "@/services/notificationService";
 import {
   Dialog,
   DialogContent,
@@ -203,14 +204,12 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         
         if (itemsError) throw itemsError;
 
-        // Send delivery confirmation notification
+        // Send delivery notification to customer
         try {
-          await supabase.functions.invoke('send-delivery-confirmation', {
-            body: { delivery_id: deliveryData.id }
-          });
-          console.log('Delivery confirmation sent');
+          await NotificationService.sendDeliveryNotification(deliveryData.id);
+          console.log('Delivery notification sent successfully');
         } catch (notifError) {
-          console.error('Failed to send delivery confirmation:', notifError);
+          console.error('Failed to send delivery notification:', notifError);
           // Don't throw - delivery was created successfully
         }
       }
@@ -221,7 +220,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         title: editData ? "Delivery updated" : "Delivery created",
         description: editData 
           ? "Delivery has been updated successfully."
-          : "New delivery created and confirmation sent to customer.",
+          : "New delivery created and notification sent to customer.",
       });
       onOpenChange(false);
       form.reset();
