@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { NotificationService } from "@/services/notificationService";
 
 interface Customer {
   id: string;
@@ -144,7 +145,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         });
       } else {
         // Create new payment
-        const { error } = await supabase
+        const { data: paymentData, error } = await supabase
           .from('payments')
           .insert([{
             customer_id: formData.customer_id,
@@ -155,13 +156,24 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
             mpesa_code: formData.payment_method === 'mpesa' ? formData.mpesa_code : null,
             status: status, // Status is calculated automatically
             created_at: new Date().toISOString()
-          }]);
+          }])
+          .select()
+          .single(); // Get the created payment data
 
         if (error) throw error;
 
+        // Send payment notification to admins
+        try {
+          await NotificationService.sendPaymentNotification(paymentData.id);
+          console.log('Payment notification sent to admins successfully');
+        } catch (notifError) {
+          console.error('Failed to send payment notification:', notifError);
+          // Don't throw - payment was created successfully
+        }
+
         toast({
           title: "Payment created",
-          description: "Payment has been created successfully.",
+          description: "Payment has been created successfully and notification sent to admins.",
         });
       }
 
