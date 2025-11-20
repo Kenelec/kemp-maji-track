@@ -481,6 +481,44 @@ export type Database = {
           },
         ]
       }
+      driver_locations: {
+        Row: {
+          id: string
+          driver_id: string
+          latitude: number
+          longitude: number
+          accuracy: number | null
+          timestamp: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          driver_id: string
+          latitude: number
+          longitude: number
+          accuracy?: number | null
+          timestamp?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          driver_id?: string
+          latitude?: number
+          longitude?: number
+          accuracy?: number | null
+          timestamp?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_locations_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications_log: {
         Row: {
           channel: string
