@@ -1,5 +1,5 @@
 const kempLogo = "/kemp-logo.png";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,15 +10,33 @@ import {
   Users, 
   Package, 
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Navigation,
+  Clock
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { CustomersSection } from "./sections/CustomersSection";
 import { ProductsSection } from "./sections/ProductsSection";
 import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
+import { AdminDriverTrackingMap } from "./sections/AdminDriverTrackingMap"; // Add this import
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
+
+interface DriverLocation {
+  id: string;
+  driver_id: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  timestamp: number | null;
+  created_at: string;
+  users: {
+    name: string;
+    phone: string | null;
+  } | null;
+}
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -27,6 +45,7 @@ interface AdminDashboardProps {
 const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("deliveries");
+  const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([]);
   
   // Enable real-time payment notifications
   usePaymentNotifications(user?.id);
@@ -36,7 +55,61 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     onLogout();
   };
 
+  // Fetch driver locations for the dashboard
+  useEffect(() => {
+    const fetchDriverLocations = async () => {
+      try {
+        const {  locationsData, error } = await supabase
+          .from('driver_locations')
+          .select(`
+            *,
+            users!inner (name, phone)
+          `)
+          .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // Last 30 minutes
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Get unique drivers with latest location
+        const uniqueDrivers = new Map();
+        locationsData?.forEach(location => {
+          if (!uniqueDrivers.has(location.driver_id) ||
+              new Date(location.created_at) > new Date(uniqueDrivers.get(location.driver_id).created_at)) {
+            uniqueDrivers.set(location.driver_id, location);
+          }
+        });
+
+        setDriverLocations(Array.from(uniqueDrivers.values()));
+      } catch (error) {
+        console.error('Error fetching driver locations:', error);
+      }
+    };
+
+    fetchDriverLocations();
+
+    // Set up real-time updates
+    const channel = supabase
+      .channel('admin-driver-locations')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'driver_locations',
+        },
+        (payload) => {
+          fetchDriverLocations(); // Refresh when new location comes in
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const menuItems = [
+    { id: "tracking", label: `Driver Tracking (${driverLocations.length})`, icon: Navigation },
     { id: "deliveries", label: "Deliveries", icon: Truck },
     { id: "payments", label: "Payments", icon: CreditCard },
     { id: "customers", label: "Customers", icon: Users },
@@ -104,14 +177,11 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
             </AlertDescription>
           </Alert>
 
+          {activeTab === "tracking" && <AdminDriverTrackingMap />}
           {activeTab === "deliveries" && <DeliveriesSection />}
-
           {activeTab === "payments" && <PaymentsSection />}
-
           {activeTab === "customers" && <CustomersSection />}
-
           {activeTab === "products" && <ProductsSection />}
-
           {activeTab === "exports" && (
             <div className="space-y-6">
               <div>
