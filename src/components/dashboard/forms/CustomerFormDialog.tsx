@@ -22,12 +22,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { NAIROBI_AREAS } from "@/constants/nairobiAreas";
 
 const customerSchema = z.object({
   customer_name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
   phone: z.string().min(1, "Phone number is required"),
-  area: z.string().optional(),
+  area: z.string().min(1, "Area is required"),
   address: z.string().optional(),
 });
 
@@ -176,10 +178,21 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
               name="area"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Area</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter area" {...field} />
-                  </FormControl>
+                  <FormLabel>Area *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select area" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {NAIROBI_AREAS.map((area) => (
+                        <SelectItem key={area} value={area}>
+                          {area}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
