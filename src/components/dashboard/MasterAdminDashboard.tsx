@@ -109,7 +109,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       setLoading(true);
 
       // Fetch admin approval requests
-      const {  requestsData, error: requestsError } = await supabase
+      const { data: requestsData, error: requestsError } = await supabase
         .from('admin_approval_requests')
         .select('*')
         .order('created_at', { ascending: false });
@@ -117,7 +117,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (requestsError) throw requestsError;
 
       // Fetch delivery queries
-      const {  queriesData, error: queriesError } = await supabase
+      const { data: queriesData, error: queriesError } = await supabase
         .from('delivery_queries')
         .select('*')
         .order('created_at', { ascending: false });
@@ -125,7 +125,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (queriesError) throw queriesError;
 
       // Fetch driver locations (last 24 hours)
-      const {  locationsData, error: locationsError } = await supabase
+      const { data: locationsData, error: locationsError } = await supabase
         .from('driver_locations')
         .select(`
           *,
