@@ -15,7 +15,9 @@ import {
   MessageCircle,
   CheckCircle2,
   XCircle,
-  Clock
+  Clock,
+  Navigation,
+  MapPin
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +27,7 @@ import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
 import { DashboardSection } from "./sections/DashboardSection";
 import { SystemSettingsSection } from "./sections/SystemSettingsSection";
+import { DriverTrackingMap } from "./sections/DriverTrackingMap";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 
 interface ApprovalRequest {
@@ -67,6 +70,20 @@ interface DeliveryQuery {
   created_at: string;
 }
 
+interface DriverLocation {
+  id: string;
+  driver_id: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  timestamp: number | null;
+  created_at: string;
+  users: {
+    name: string;
+    phone: string | null;
+  } | null;
+}
+
 interface MasterAdminDashboardProps {
   onLogout: () => void;
 }
@@ -76,6 +93,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
   const [deliveryQueries, setDeliveryQueries] = useState<DeliveryQuery[]>([]);
+  const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Enable real-time payment notifications
@@ -91,7 +109,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       setLoading(true);
 
       // Fetch admin approval requests
-      const { data: requestsData, error: requestsError } = await supabase
+      const {  requestsData, error: requestsError } = await supabase
         .from('admin_approval_requests')
         .select('*')
         .order('created_at', { ascending: false });
@@ -99,17 +117,30 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (requestsError) throw requestsError;
 
       // Fetch delivery queries
-      const { data: queriesData, error: queriesError } = await supabase
+      const {  queriesData, error: queriesError } = await supabase
         .from('delivery_queries')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (queriesError) throw queriesError;
 
+      // Fetch driver locations (last 24 hours)
+      const {  locationsData, error: locationsError } = await supabase
+        .from('driver_locations')
+        .select(`
+          *,
+          users!inner (name, phone)
+        `)
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
+        .order('created_at', { ascending: false });
+
+      if (locationsError) throw locationsError;
+
       setApprovalRequests(requestsData || []);
       setDeliveryQueries(queriesData || []);
+      setDriverLocations(locationsData || []);
     } catch (error) {
-      console.error('Error fetching approval data', error);
+      console.error('Error fetching dashboard data', error);
     } finally {
       setLoading(false);
     }
@@ -200,6 +231,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Users },
+    { id: "tracking", label: `Driver Tracking (${driverLocations.length})`, icon: Navigation },
     { id: "approvals", label: `Approvals (${approvalRequests.filter(r => r.status === 'pending').length + deliveryQueries.filter(q => q.status === 'open').length})`, icon: AlertTriangle },
     { id: "deliveries", label: "Deliveries", icon: Truck },
     { id: "payments", label: "Payments", icon: CreditCard },
@@ -256,6 +288,8 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
 
   const renderContent = () => {
     switch (activeTab) {
+      case "tracking":
+        return <DriverTrackingMap />;
       case "approvals":
         return (
           <div className="space-y-6">
