@@ -22,7 +22,6 @@ export function DriverTrackingMap() {
   const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchDriverLocations();
@@ -81,7 +80,7 @@ export function DriverTrackingMap() {
     }
   };
 
-  // Function to render a map placeholder for HERE Maps
+  // Function to render a simple map visualization using OpenStreetMap
   const renderMap = () => {
     if (driverLocations.length === 0) {
       return (
@@ -91,55 +90,49 @@ export function DriverTrackingMap() {
       );
     }
 
-    // For now, we'll show a placeholder that would eventually be replaced with a real map
+    // Show a visualization of locations on a map-like background
     return (
       <div className="h-96 rounded-lg border bg-gradient-to-br from-blue-50 to-green-50 relative overflow-hidden">
-        {/* This is a placeholder - in a real implementation, we'd use HERE Maps JavaScript API */}
         <div className="absolute inset-0">
-          {/* Show a simplified representation of locations */}
-          <div className="relative w-full h-full">
-            {/* Road pattern as background */}
-            <div className="absolute inset-0 opacity-20">
-              <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <defs>
-                  <pattern id="roads" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-                    <path d="M 0,50 L 100,50" stroke="#4F46E5" strokeWidth="0.5" />
-                    <path d="M 50,0 L 50,100" stroke="#4F46E5" strokeWidth="0.5" />
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#roads)" />
-              </svg>
+          {/* Water-themed background with subtle road patterns */}
+          <div className="absolute inset-0 opacity-20">
+            <div className="grid grid-cols-8 grid-rows-6 h-full w-full">
+              {Array.from({ length: 48 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-blue-300"></div>
+                </div>
+              ))}
             </div>
+          </div>
+          
+          {/* Driver location markers */}
+          {driverLocations.map((location, index) => {
+            // Calculate position in grid based on index for visual distribution
+            const top = 20 + (index % 4) * 20;
+            const left = 20 + (index % 3) * 30;
             
-            {/* Driver location markers */}
-            {driverLocations.map((location, index) => {
-              // Calculate position in grid based on index
-              const top = 15 + (index % 4) * 25;
-              const left = 15 + (index % 3) * 35;
-              
-              return (
-                <div 
-                  key={location.id}
-                  className="absolute transform -translate-x-1/2 -translate-y-1/2"
-                  style={{ top: `${top}%`, left: `${left}%` }}
-                >
-                  <div className="flex flex-col items-center">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-                      <Navigation className="w-5 h-5 text-white" />
+            return (
+              <div 
+                key={location.id}
+                className="absolute transform -translate-x-1/2 -translate-y-1/2"
+                style={{ top: `${top}%`, left: `${left}%` }}
+              >
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                    <Navigation className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="bg-white rounded-lg shadow-md p-2 mt-1 max-w-xs">
+                    <div className="text-xs font-medium">
+                      {location.users?.name || 'Unknown Driver'}
                     </div>
-                    <div className="bg-white rounded-lg shadow-md p-2 mt-1 max-w-xs">
-                      <div className="text-xs font-medium">
-                        {location.users?.name || 'Unknown Driver'}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
-                      </div>
+                    <div className="text-xs text-muted-foreground">
+                      {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
