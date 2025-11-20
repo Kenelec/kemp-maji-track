@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,9 +26,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { NAIROBI_AREAS } from "@/constants/nairobiAreas";
 
 const customerSchema = z.object({
-  customer_name: z.string().min(1, "Name is required"),
+  customer_name: z.string().min(1, "Customer name is required"),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
-  phone: z.string().min(1, "Phone number is required"),
+  phone: z.string().min(1, "Phone is required"),
   area: z.string().min(1, "Area is required"),
   address: z.string().optional(),
 });
@@ -38,10 +38,10 @@ type CustomerFormData = z.infer<typeof customerSchema>;
 interface CustomerFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  customer?: any;
+  editData?: any;
 }
 
-export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFormDialogProps) {
+export function CustomerFormDialog({ open, onOpenChange, editData }: CustomerFormDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -57,13 +57,13 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
   });
 
   useEffect(() => {
-    if (customer) {
+    if (editData) {
       form.reset({
-        customer_name: customer.customer_name,
-        email: customer.email || "",
-        phone: customer.phone || "",
-        area: customer.area || "",
-        address: customer.address || "",
+        customer_name: editData.customer_name || "",
+        email: editData.email || "",
+        phone: editData.phone || "",
+        area: editData.area || "",
+        address: editData.address || "",
       });
     } else {
       form.reset({
@@ -74,7 +74,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
         address: "",
       });
     }
-  }, [customer, form]);
+  }, [editData, form]);
 
   const mutation = useMutation({
     mutationFn: async (data: CustomerFormData) => {
@@ -82,15 +82,15 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
         customer_name: data.customer_name,
         email: data.email || null,
         phone: data.phone || null,
-        area: data.area || null,
+        area: data.area || null, // This matches your database column
         address: data.address || null,
       };
 
-      if (customer) {
+      if (editData) {
         const { error } = await supabase
           .from("customers")
           .update(payload)
-          .eq("id", customer.id);
+          .eq("id", editData.id);
         
         if (error) throw error;
       } else {
@@ -104,13 +104,13 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       toast({
-        title: customer ? "Customer updated" : "Customer created",
-        description: customer ? "Customer has been updated successfully." : "New customer has been added.",
+        title: editData ? "Customer updated" : "Customer created",
+        description: editData ? "Customer has been updated successfully." : "New customer has been added.",
       });
       onOpenChange(false);
       form.reset();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Error",
         description: "Failed to save customer: " + error.message,
@@ -127,9 +127,9 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{customer ? "Edit Customer" : "Add Customer"}</DialogTitle>
+          <DialogTitle>{editData ? "Edit Customer" : "Add Customer"}</DialogTitle>
           <DialogDescription>
-            {customer ? "Update customer information" : "Add a new customer to the database"}
+            {editData ? "Update customer information" : "Add a new customer to the database"}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -139,7 +139,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
               name="customer_name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Customer Name</FormLabel>
+                  <FormLabel>Customer Name *</FormLabel>
                   <FormControl>
                     <Input placeholder="Enter customer name" {...field} />
                   </FormControl>
@@ -165,7 +165,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone</FormLabel>
+                  <FormLabel>Phone *</FormLabel>
                   <FormControl>
                     <Input placeholder="+254..." {...field} />
                   </FormControl>
@@ -210,12 +210,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
                 </FormItem>
               )}
             />
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end space-x-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? "Saving..." : customer ? "Update" : "Create"}
+                {mutation.isPending ? "Saving..." : editData ? "Update" : "Create"}
               </Button>
             </div>
           </form>
