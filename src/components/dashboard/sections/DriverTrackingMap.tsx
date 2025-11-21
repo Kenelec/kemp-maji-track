@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { MapPin, Navigation, Clock } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Navigation, MapPin, Clock, Users } from "lucide-react";
 
 interface DriverLocation {
   id: string;
@@ -18,36 +19,16 @@ interface DriverLocation {
   } | null;
 }
 
-interface DriverHistory {
-  id: string;
-  driver_id: string;
-  latitude: number;
-  longitude: number;
-  accuracy: number | null;
-  timestamp: number | null;
-  created_at: string;
-  users: {
-    name: string;
-    phone: string | null;
-  } | null;
-}
-
 export function DriverTrackingMap() {
+  const { user } = useAuth();
   const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([]);
-  const [driverHistory, setDriverHistory] = useState<DriverHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [historyFilter, setHistoryFilter] = useState({
-    startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 7 days
-    endDate: new Date().toISOString().split('T')[0],
-    driverId: ''
-  });
 
   useEffect(() => {
     fetchDriverLocations();
-    fetchDriverHistory();
     
-    // Set up real-time updates for locations
+    // Set up real-time updates for driver locations
     const channel = supabase
       .channel('driver-locations-changes')
       .on(
@@ -70,7 +51,9 @@ export function DriverTrackingMap() {
 
   const fetchDriverLocations = async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+      
+      const {  locationsData, error } = await supabase
         .from('driver_locations')
         .select(`
           *,
@@ -83,7 +66,7 @@ export function DriverTrackingMap() {
 
       // Get unique drivers with latest location
       const uniqueDrivers = new Map();
-      data?.forEach(location => {
+      locationsData?.forEach(location => {
         if (!uniqueDrivers.has(location.driver_id) ||
             new Date(location.created_at) > new Date(uniqueDrivers.get(location.driver_id).created_at)) {
           uniqueDrivers.set(location.driver_id, location);
@@ -94,42 +77,9 @@ export function DriverTrackingMap() {
     } catch (err) {
       console.error('Error fetching driver locations:', err);
       setError('Failed to fetch driver locations');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const fetchDriverHistory = async (startDate?: string, endDate?: string, driverId?: string) => {
-    try {
-      let query = supabase
-        .from('driver_locations')
-        .select(`
-          *,
-          users!inner (name, phone)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (startDate) {
-        query = query.gte('created_at', startDate);
-      }
-      if (endDate) {
-        query = query.lte('created_at', new Date(new Date(endDate).setHours(23, 59, 59, 999).toISOString());
-      }
-      if (driverId) {
-        query = query.eq('driver_id', driverId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      setDriverHistory(data || []);
-    } catch (err) {
-      console.error('Error fetching driver history:', err);
-      setError('Failed to fetch driver history');
-    }
-  };
-
-  const handleHistoryFilter = () => {
-    fetchDriverHistory(historyFilter.startDate, historyFilter.endDate, historyFilter.driverId);
   };
 
   // Function to render a simple map visualization
@@ -140,6 +90,9 @@ export function DriverTrackingMap() {
           <div className="text-center">
             <Navigation className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">No active drivers to display</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Drivers need to have the app running to send location updates
+            </p>
           </div>
         </div>
       );
@@ -147,50 +100,48 @@ export function DriverTrackingMap() {
 
     return (
       <div className="h-96 rounded-lg border bg-gradient-to-br from-blue-50 to-green-50 relative overflow-hidden">
-        <div className="absolute inset-0">
-          {/* Water-themed background with subtle road patterns */}
-          <div className="absolute inset-0 opacity-20">
-            <div className="grid grid-cols-8 grid-rows-6 h-full w-full">
-              {Array.from({ length: 48 }).map((_, i) => (
-                <div key={i} className="flex items-center justify-center">
-                  <div className="w-2 h-2 rounded-full bg-blue-300"></div>
-                </div>
-              ))}
-            </div>
+        {/* Water-themed background with subtle road patterns */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="grid grid-cols-8 grid-rows-6 h-full w-full">
+            {Array.from({ length: 48 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-center">
+                <div className="w-2 h-2 rounded-full bg-blue-300"></div>
+              </div>
+            ))}
           </div>
+        </div>
+        
+        {/* Driver location markers */}
+        {driverLocations.map((location, index) => {
+          // Calculate position in grid based on index for visual distribution
+          const top = 20 + (index % 4) * 20;
+          const left = 20 + (index % 3) * 30;
           
-          {/* Driver location markers */}
-          {driverLocations.map((location, index) => {
-            // Calculate position in grid based on index for visual distribution
-            const top = 20 + (index % 4) * 20;
-            const left = 20 + (index % 3) * 30;
-            
-            return (
-              <div 
-                key={location.id}
-                className="absolute transform -translate-x-1/2 -translate-y-1/2"
-                style={{ top: `${top}%`, left: `${left}%` }}
-              >
-                <div className="flex flex-col items-center">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-                    <Navigation className="w-5 h-5 text-white" />
+          return (
+            <div 
+              key={location.id}
+              className="absolute transform -translate-x-1/2 -translate-y-1/2"
+              style={{ top: `${top}%`, left: `${left}%` }}
+            >
+              <div className="flex flex-col items-center">
+                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                  <Navigation className="w-5 h-5 text-white" />
+                </div>
+                <div className="bg-white rounded-lg shadow-md p-2 mt-1 max-w-xs">
+                  <div className="text-xs font-medium">
+                    {location.users?.name || 'Unknown Driver'}
                   </div>
-                  <div className="bg-white rounded-lg shadow-md p-2 mt-1 max-w-xs">
-                    <div className="text-xs font-medium">
-                      {location.users?.name || 'Unknown Driver'}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(location.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
+                  <div className="text-xs text-muted-foreground">
+                    {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(location.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -258,78 +209,81 @@ export function DriverTrackingMap() {
           </CardContent>
         </Card>
 
-        {/* Driver History Card */}
+        {/* Driver Stats */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Location History
+              <Users className="w-5 h-5" />
+              Driver Statistics
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Start Date</label>
-                <input
-                  type="date"
-                  value={historyFilter.startDate}
-                  onChange={(e) => setHistoryFilter({...historyFilter, startDate: e.target.value})}
-                  className="w-full p-2 border rounded"
-                />
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Active Drivers</span>
+                <Badge variant="secondary">{driverLocations.length}</Badge>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">End Date</label>
-                <input
-                  type="date"
-                  value={historyFilter.endDate}
-                  onChange={(e) => setHistoryFilter({...historyFilter, endDate: e.target.value})}
-                  className="w-full p-2 border rounded"
-                />
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Online in Last 30 Min</span>
+                <Badge variant="secondary">{driverLocations.length}</Badge>
               </div>
-              <button
-                onClick={handleHistoryFilter}
-                className="w-full bg-primary text-primary-foreground py-2 px-4 rounded hover:bg-primary/90"
-              >
-                Apply Filter
-              </button>
-            </div>
-
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {driverHistory.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">No location history found</p>
-              ) : (
-                driverHistory.slice(0, 10).map(location => (
-                  <div key={location.id} className="border rounded p-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-medium text-sm">
-                          {location.users?.name || 'Unknown Driver'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(location.created_at).toLocaleDateString()}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(location.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    </div>
-                    {location.accuracy && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Accuracy: {location.accuracy.toFixed(2)}m
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Today's Deliveries</span>
+                <Badge variant="secondary">0</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Completed Today</span>
+                <Badge variant="secondary">0</Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Locations */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Recent Location Updates
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {driverLocations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No recent location updates
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {driverLocations.slice(0, 10).map(location => (
+                <div key={location.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Navigation className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-sm">
+                        {location.users?.name || 'Unknown Driver'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right text-xs">
+                    <div className="text-muted-foreground">
+                      {new Date(location.created_at).toLocaleDateString()}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {new Date(location.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
