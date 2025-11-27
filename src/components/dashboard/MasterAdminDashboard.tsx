@@ -1,4 +1,3 @@
-const kempLogo = "/kemp-logo.png";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,7 +42,7 @@ interface ApprovalRequest {
   request_type: string;
   target_id: string;
   target_table: string;
-  original_data: any;
+  original_ any;
   requested_changes: any;
   created_at: string;
   updated_at: string;
@@ -104,12 +103,12 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
     onLogout();
   };
 
-  const fetchApprovalData = async () => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
 
       // Fetch admin approval requests
-      const { data: requestsData, error: requestsError } = await supabase
+      const {  requestsData, error: requestsError } = await supabase
         .from('admin_approval_requests')
         .select('*')
         .order('created_at', { ascending: false });
@@ -117,7 +116,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (requestsError) throw requestsError;
 
       // Fetch delivery queries
-      const { data: queriesData, error: queriesError } = await supabase
+      const {  queriesData, error: queriesError } = await supabase
         .from('delivery_queries')
         .select('*')
         .order('created_at', { ascending: false });
@@ -125,7 +124,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (queriesError) throw queriesError;
 
       // Fetch driver locations (last 24 hours)
-      const { data: locationsData, error: locationsError } = await supabase
+      const {  locationsData, error: locationsError } = await supabase
         .from('driver_locations')
         .select(`
           *,
@@ -136,15 +135,48 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
 
       if (locationsError) throw locationsError;
 
+      // Get unique drivers with latest location
+      const uniqueDrivers = new Map();
+      locationsData?.forEach(location => {
+        if (!uniqueDrivers.has(location.driver_id) ||
+            new Date(location.created_at) > new Date(uniqueDrivers.get(location.driver_id).created_at)) {
+          uniqueDrivers.set(location.driver_id, location);
+        }
+      });
+
       setApprovalRequests(requestsData || []);
       setDeliveryQueries(queriesData || []);
-      setDriverLocations(locationsData || []);
+      setDriverLocations(Array.from(uniqueDrivers.values()));
     } catch (error) {
       console.error('Error fetching dashboard data', error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchDashboardData();
+    
+    // Set up real-time updates for driver locations
+    const channel = supabase
+      .channel('master-admin-dashboard-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'driver_locations',
+        },
+        (payload) => {
+          fetchDashboardData(); // Refresh when new location comes in
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const approveRequest = async (requestId: string, table: string, id: string, changes: any) => {
     try {
@@ -185,7 +217,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
         if (updateError) throw updateError;
       }
 
-      fetchApprovalData(); // Refresh the data
+      fetchDashboardData(); // Refresh the data
     } catch (error) {
       console.error('Error approving request:', error);
     }
@@ -219,15 +251,11 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
         if (updateError) throw updateError;
       }
 
-      fetchApprovalData(); // Refresh the data
+      fetchDashboardData(); // Refresh the data
     } catch (error) {
       console.error('Error rejecting request:', error);
     }
   };
-
-  useEffect(() => {
-    fetchApprovalData();
-  }, []);
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Users },
@@ -650,7 +678,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
         <div className="flex h-16 items-center justify-between px-6">
           <div className="flex items-center space-x-3">
             <img 
-              src={kempLogo} 
+              src="/kemp-logo.png" 
               alt="KEMP Logo" 
               className="w-8 h-8 md:w-10 md:h-10 object-contain"
             />
