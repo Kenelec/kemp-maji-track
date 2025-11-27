@@ -115,7 +115,7 @@ export function AdminDriverTrackingMap() {
         query = query.gte('created_at', startDate);
       }
       if (endDate) {
-        query = query.lte('created_at', new Date(new Date(endDate).setHours(23, 59, 59, 999).toISOString());
+        query = query.lte('created_at', new Date(new Date(endDate).setHours(23, 59, 59, 999)).toISOString());
       }
       if (driverId) {
         query = query.eq('driver_id', driverId);
