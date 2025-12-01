@@ -26,17 +26,6 @@ export type Database = {
           status: string | null
           target_id: string
           target_table: string
-          admin_notes: string | null
-          approved_at: string | null
-          approved_by: string | null
-          rejection_reason: string | null
-          rejected_at: string | null
-          rejected_by: string | null
-          request_type: string | null
-          original_data: Json | null
-          requested_changes: Json | null
-          created_at: string | null
-          updated_at: string | null
         }
         Insert: {
           acted_at?: string | null
@@ -49,17 +38,6 @@ export type Database = {
           status?: string | null
           target_id: string
           target_table: string
-          admin_notes?: string | null
-          approved_at?: string | null
-          approved_by?: string | null
-          rejection_reason?: string | null
-          rejected_at?: string | null
-          rejected_by?: string | null
-          request_type?: string | null
-          original_data?: Json | null
-          requested_changes?: Json | null
-          created_at?: string | null
-          updated_at?: string | null
         }
         Update: {
           acted_at?: string | null
@@ -72,17 +50,6 @@ export type Database = {
           status?: string | null
           target_id?: string
           target_table?: string
-          admin_notes?: string | null
-          approved_at?: string | null
-          approved_by?: string | null
-          rejection_reason?: string | null
-          rejected_at?: string | null
-          rejected_by?: string | null
-          request_type?: string | null
-          original_data?: Json | null
-          requested_changes?: Json | null
-          created_at?: string | null
-          updated_at?: string | null
         }
         Relationships: [
           {
@@ -227,6 +194,11 @@ export type Database = {
           delivery_date: string
           delivery_note_no: string | null
           delivery_status: string | null
+          discrepancy_flag: boolean | null
+          discrepancy_notes: string | null
+          discrepancy_resolved: boolean | null
+          discrepancy_resolved_at: string | null
+          discrepancy_resolved_by: string | null
           id: string
           last_reminder_sent_at: string | null
           mpesa_transaction_id: string | null
@@ -238,11 +210,6 @@ export type Database = {
           qty: number
           total_amount: number
           unit_rate: number
-          discrepancy_flag: boolean | null
-          discrepancy_notes: string | null
-          discrepancy_resolved: boolean | null
-          discrepancy_resolved_by: string | null
-          discrepancy_resolved_at: string | null
         }
         Insert: {
           created_at?: string | null
@@ -251,6 +218,11 @@ export type Database = {
           delivery_date: string
           delivery_note_no?: string | null
           delivery_status?: string | null
+          discrepancy_flag?: boolean | null
+          discrepancy_notes?: string | null
+          discrepancy_resolved?: boolean | null
+          discrepancy_resolved_at?: string | null
+          discrepancy_resolved_by?: string | null
           id?: string
           last_reminder_sent_at?: string | null
           mpesa_transaction_id?: string | null
@@ -262,11 +234,6 @@ export type Database = {
           qty: number
           total_amount: number
           unit_rate: number
-          discrepancy_flag?: boolean | null
-          discrepancy_notes?: string | null
-          discrepancy_resolved?: boolean | null
-          discrepancy_resolved_by?: string | null
-          discrepancy_resolved_at?: string | null
         }
         Update: {
           created_at?: string | null
@@ -275,6 +242,11 @@ export type Database = {
           delivery_date?: string
           delivery_note_no?: string | null
           delivery_status?: string | null
+          discrepancy_flag?: boolean | null
+          discrepancy_notes?: string | null
+          discrepancy_resolved?: boolean | null
+          discrepancy_resolved_at?: string | null
+          discrepancy_resolved_by?: string | null
           id?: string
           last_reminder_sent_at?: string | null
           mpesa_transaction_id?: string | null
@@ -286,11 +258,6 @@ export type Database = {
           qty?: number
           total_amount?: number
           unit_rate?: number
-          discrepancy_flag?: boolean | null
-          discrepancy_notes?: string | null
-          discrepancy_resolved?: boolean | null
-          discrepancy_resolved_by?: string | null
-          discrepancy_resolved_at?: string | null
         }
         Relationships: [
           {
@@ -348,6 +315,57 @@ export type Database = {
           },
         ]
       }
+      delivery_discrepancies: {
+        Row: {
+          admin_notes: string | null
+          created_at: string | null
+          customer_id: string | null
+          delivery_id: string | null
+          id: string
+          query_description: string
+          query_type: string | null
+          resolved_at: string | null
+          status: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string | null
+          customer_id?: string | null
+          delivery_id?: string | null
+          id?: string
+          query_description: string
+          query_type?: string | null
+          resolved_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string | null
+          customer_id?: string | null
+          delivery_id?: string | null
+          id?: string
+          query_description?: string
+          query_type?: string | null
+          resolved_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_discrepancies_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_discrepancies_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_items: {
         Row: {
           customer_id: string | null
@@ -398,15 +416,11 @@ export type Database = {
       }
       delivery_queries: {
         Row: {
-          admin_resolution_notes: string | null
           approval_request_id: string | null
           created_at: string | null
           customer_id: string
           delivery_id: string
           id: string
-          master_admin_approved: boolean | null
-          master_admin_approved_at: string | null
-          master_admin_approved_by: string | null
           message: string
           query_type: string
           requires_approval: boolean | null
@@ -414,19 +428,13 @@ export type Database = {
           resolved_at: string | null
           resolved_by: string | null
           status: string
-          admin_resolved_at: string | null
-          admin_resolved_by: string | null
         }
         Insert: {
-          admin_resolution_notes?: string | null
           approval_request_id?: string | null
           created_at?: string | null
           customer_id: string
           delivery_id: string
           id?: string
-          master_admin_approved?: boolean | null
-          master_admin_approved_at?: string | null
-          master_admin_approved_by?: string | null
           message: string
           query_type: string
           requires_approval?: boolean | null
@@ -434,19 +442,13 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           status?: string
-          admin_resolved_at?: string | null
-          admin_resolved_by?: string | null
         }
         Update: {
-          admin_resolution_notes?: string | null
           approval_request_id?: string | null
           created_at?: string | null
           customer_id?: string
           delivery_id?: string
           id?: string
-          master_admin_approved?: boolean | null
-          master_admin_approved_at?: string | null
-          master_admin_approved_by?: string | null
           message?: string
           query_type?: string
           requires_approval?: boolean | null
@@ -454,10 +456,15 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           status?: string
-          admin_resolved_at?: string | null
-          admin_resolved_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "delivery_queries_approval_request_id_fkey"
+            columns: ["approval_request_id"]
+            isOneToOne: false
+            referencedRelation: "admin_approval_requests"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "delivery_queries_customer_id_fkey"
             columns: ["customer_id"]
@@ -483,41 +490,33 @@ export type Database = {
       }
       driver_locations: {
         Row: {
-          id: string
+          accuracy: number | null
+          created_at: string | null
           driver_id: string
+          id: string
           latitude: number
           longitude: number
-          accuracy: number | null
           timestamp: number | null
-          created_at: string
         }
         Insert: {
-          id?: string
+          accuracy?: number | null
+          created_at?: string | null
           driver_id: string
+          id?: string
           latitude: number
           longitude: number
-          accuracy?: number | null
           timestamp?: number | null
-          created_at?: string
         }
         Update: {
-          id?: string
+          accuracy?: number | null
+          created_at?: string | null
           driver_id?: string
+          id?: string
           latitude?: number
           longitude?: number
-          accuracy?: number | null
           timestamp?: number | null
-          created_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "driver_locations_driver_id_fkey"
-            columns: ["driver_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       notifications_log: {
         Row: {
@@ -719,6 +718,41 @@ export type Database = {
           performed_by?: string | null
         }
         Relationships: []
+      }
+      pending_changes: {
+        Row: {
+          approval_request_id: string | null
+          created_at: string | null
+          id: string
+          pending_data: Json | null
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          approval_request_id?: string | null
+          created_at?: string | null
+          id?: string
+          pending_data?: Json | null
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          approval_request_id?: string | null
+          created_at?: string | null
+          id?: string
+          pending_data?: Json | null
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_changes_approval_request_id_fkey"
+            columns: ["approval_request_id"]
+            isOneToOne: false
+            referencedRelation: "admin_approval_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       products: {
         Row: {
