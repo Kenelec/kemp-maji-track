@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CustomerFormDialog } from "../forms/CustomerFormDialog";
+import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +23,7 @@ export function CustomersSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -81,10 +83,16 @@ export function CustomersSection() {
           <h2 className="text-2xl font-bold text-foreground">Customers</h2>
           <p className="text-muted-foreground">Manage customer information</p>
         </div>
-        <Button className="bg-gradient-secondary" onClick={handleAdd}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Customer
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsExcelUploadOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <Button className="bg-gradient-secondary" onClick={handleAdd}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Customer
+          </Button>
+        </div>
       </div>
       
       <Card>
@@ -146,7 +154,14 @@ export function CustomersSection() {
       <CustomerFormDialog
         open={isFormOpen}
         onOpenChange={setIsFormOpen}
-        customer={editingCustomer}
+        editData={editingCustomer}
+      />
+
+      <ExcelUploadDialog
+        open={isExcelUploadOpen}
+        onOpenChange={setIsExcelUploadOpen}
+        type="customers"
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customers"] })}
       />
 
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>

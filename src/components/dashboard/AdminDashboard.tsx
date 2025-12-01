@@ -23,6 +23,7 @@ import { PaymentsSection } from "./sections/PaymentsSection";
 import { AdminDriverTrackingMap } from "./sections/AdminDriverTrackingMap"; // Add this import
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
+import { NotificationCenter } from "./NotificationCenter";
 
 interface DriverLocation {
   id: string;
@@ -59,7 +60,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   useEffect(() => {
     const fetchDriverLocations = async () => {
       try {
-        const {  locationsData, error } = await supabase
+        const { data: locationsData, error } = await supabase
           .from('driver_locations')
           .select(`
             *,
@@ -136,6 +137,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
+            <NotificationCenter userId={user?.id} />
             <span className="text-sm text-muted-foreground">
               Welcome, {user?.email}
             </span>

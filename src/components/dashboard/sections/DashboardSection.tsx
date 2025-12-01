@@ -100,64 +100,37 @@ export function DashboardSection() {
   const uniqueOverdueCustomers = new Set(overduePayments?.map(p => p.customer_id) || []).size;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div>
-        <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
-        <p className="text-muted-foreground">Overview of your business metrics</p>
+        <h2 className="text-xl font-bold text-foreground">Dashboard</h2>
+        <p className="text-sm text-muted-foreground">Overview of your business metrics</p>
       </div>
 
-      {/* Customer Stats */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            Total Customers
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-4xl font-bold text-primary">{customersCount || 0}</div>
-        </CardContent>
-      </Card>
-
-      {/* Deliveries Stats */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Truck className="w-5 h-5 text-secondary" />
-            Deliveries
-          </CardTitle>
-          <CardDescription>
-            <Select value={deliveryPeriod} onValueChange={setDeliveryPeriod}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="this-week">This Week</SelectItem>
-                <SelectItem value="this-month">This Month</SelectItem>
-                <SelectItem value="this-year">This Year</SelectItem>
-                <SelectItem value="all">All</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-4xl font-bold text-secondary">{deliveriesData?.length || 0}</div>
-          <p className="text-sm text-muted-foreground mt-2">deliveries completed</p>
-        </CardContent>
-      </Card>
-
-      {/* Payments Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Compact Grid Layout for Laptop Screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+        {/* Customer Stats */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-accent" />
-              Payments
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Users className="w-4 h-4 text-primary" />
+              Customers
             </CardTitle>
-            <CardDescription>
-              <Select value={paymentPeriod} onValueChange={setPaymentPeriod}>
-                <SelectTrigger className="w-[200px]">
+          </CardHeader>
+          <CardContent className="p-3 pt-0">
+            <div className="text-2xl font-bold text-primary">{customersCount || 0}</div>
+          </CardContent>
+        </Card>
+
+        {/* Deliveries Stats */}
+        <Card>
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Truck className="w-4 h-4 text-secondary" />
+              Deliveries
+            </CardTitle>
+            <CardDescription className="mt-1">
+              <Select value={deliveryPeriod} onValueChange={setDeliveryPeriod}>
+                <SelectTrigger className="w-full h-7 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -170,42 +143,72 @@ export function DashboardSection() {
               </Select>
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <CreditCard className="w-4 h-4" />
-                Cash Payments
-              </div>
-              <div className="text-3xl font-bold text-secondary">KSh {cashTotal.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <CreditCard className="w-4 h-4" />
-                M-Pesa Payments
-              </div>
-              <div className="text-3xl font-bold text-accent">KSh {mpesaTotal.toLocaleString()}</div>
-            </div>
+          <CardContent className="p-3 pt-0">
+            <div className="text-2xl font-bold text-secondary">{deliveriesData?.length || 0}</div>
           </CardContent>
         </Card>
 
-        <Card 
-          className="cursor-pointer hover:shadow-lg transition-shadow"
-          onClick={() => setOverdueDialogOpen(true)}
-        >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-destructive" />
-              Payments Overdue
+        {/* Cash Payments */}
+        <Card>
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <CreditCard className="w-4 h-4 text-accent" />
+              Cash
             </CardTitle>
-            <CardDescription>Payments requiring attention • Click to view details</CardDescription>
+            <CardDescription className="mt-1">
+              <Select value={paymentPeriod} onValueChange={setPaymentPeriod}>
+                <SelectTrigger className="w-full h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="this-week">This Week</SelectItem>
+                  <SelectItem value="this-month">This Month</SelectItem>
+                  <SelectItem value="this-year">This Year</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-destructive">KSh {overdueTotal.toLocaleString()}</div>
-            <p className="text-sm text-muted-foreground mt-2">{overduePayments?.length || 0} payments overdue</p>
-            <p className="text-sm text-muted-foreground">{uniqueOverdueCustomers} customers</p>
+          <CardContent className="p-3 pt-0">
+            <div className="text-xl font-bold text-secondary">KSh {cashTotal.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+
+        {/* M-Pesa Payments */}
+        <Card>
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <CreditCard className="w-4 h-4 text-accent" />
+              M-Pesa
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-0">
+            <div className="text-xl font-bold text-accent">KSh {mpesaTotal.toLocaleString()}</div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Overdue Payments - Full Width */}
+      <Card 
+        className="cursor-pointer hover:shadow-lg transition-shadow"
+        onClick={() => setOverdueDialogOpen(true)}
+      >
+        <CardHeader className="p-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <AlertCircle className="w-4 h-4 text-destructive" />
+            Payments Overdue • Click to view details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-0">
+          <div className="flex items-center justify-between">
+            <div className="text-2xl font-bold text-destructive">KSh {overdueTotal.toLocaleString()}</div>
+            <div className="text-sm text-muted-foreground">
+              {overduePayments?.length || 0} payments • {uniqueOverdueCustomers} customers
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <OverduePaymentsDialog 
         open={overdueDialogOpen}
