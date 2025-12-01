@@ -87,6 +87,29 @@ Deno.serve(async (req) => {
         provider_ref: callback.transactionId
       });
 
+      // Create in-app notification for all admins
+      const { data: admins } = await supabase
+        .from('users')
+        .select('id')
+        .in('role_id', (await supabase.from('user_roles').select('id').in('name', ['Admin', 'MasterAdmin'])).data?.map(r => r.id) || []);
+
+      if (admins && admins.length > 0) {
+        await supabase.from('in_app_notifications').insert(
+          admins.map(admin => ({
+            user_id: admin.id,
+            type: 'payment_received',
+            title: 'Payment Received!',
+            message: `${customer.customer_name} paid KES ${delivery.total_amount} via M-Pesa (Ref: ${callback.transactionId})`,
+            metadata: {
+              customer_id: delivery.customer_id,
+              delivery_id: deliveryId,
+              amount: delivery.total_amount,
+              transaction_id: callback.transactionId,
+            },
+          }))
+        );
+      }
+
     } else if (callback.status === 'Failed') {
       console.log(`Payment failed for delivery ${deliveryId}`);
       

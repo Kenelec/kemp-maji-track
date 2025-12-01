@@ -28,6 +28,7 @@ import { DashboardSection } from "./sections/DashboardSection";
 import { SystemSettingsSection } from "./sections/SystemSettingsSection";
 import { DriverTrackingMap } from "./sections/DriverTrackingMap";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
+import { NotificationCenter } from "./NotificationCenter";
 
 interface ApprovalRequest {
   id: string;
@@ -42,7 +43,7 @@ interface ApprovalRequest {
   request_type: string;
   target_id: string;
   target_table: string;
-  original_ any;
+  original_data: any;
   requested_changes: any;
   created_at: string;
   updated_at: string;
@@ -108,7 +109,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       setLoading(true);
 
       // Fetch admin approval requests
-      const {  requestsData, error: requestsError } = await supabase
+      const { data: requestsData, error: requestsError } = await supabase
         .from('admin_approval_requests')
         .select('*')
         .order('created_at', { ascending: false });
@@ -116,7 +117,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (requestsError) throw requestsError;
 
       // Fetch delivery queries
-      const {  queriesData, error: queriesError } = await supabase
+      const { data: queriesData, error: queriesError } = await supabase
         .from('delivery_queries')
         .select('*')
         .order('created_at', { ascending: false });
@@ -124,7 +125,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       if (queriesError) throw queriesError;
 
       // Fetch driver locations (last 24 hours)
-      const {  locationsData, error: locationsError } = await supabase
+      const { data: locationsData, error: locationsError } = await supabase
         .from('driver_locations')
         .select(`
           *,
@@ -144,8 +145,8 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
         }
       });
 
-      setApprovalRequests(requestsData || []);
-      setDeliveryQueries(queriesData || []);
+      setApprovalRequests(requestsData as any || []);
+      setDeliveryQueries(queriesData as any || []);
       setDriverLocations(Array.from(uniqueDrivers.values()));
     } catch (error) {
       console.error('Error fetching dashboard data', error);
@@ -690,6 +691,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
+            <NotificationCenter userId={user?.id} />
             <span className="text-sm text-muted-foreground">
               Welcome, {user?.email}
             </span>

@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle, Pencil, Trash2 } from "lucide-react";
+import { Plus, CheckCircle, Pencil, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PaymentFormDialog } from "../forms/PaymentFormDialog";
+import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import { format } from "date-fns";
 import {
   AlertDialog,
@@ -24,6 +25,7 @@ export function PaymentsSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
@@ -181,10 +183,16 @@ export function PaymentsSection() {
           <h2 className="text-2xl font-bold text-foreground">Payments</h2>
           <p className="text-muted-foreground">Track customer payments</p>
         </div>
-        <Button className="bg-gradient-primary" onClick={() => setIsFormOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Payment
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsExcelUploadOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <Button className="bg-gradient-primary" onClick={() => setIsFormOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Payment
+          </Button>
+        </div>
       </div>
       
       <Card>
@@ -289,6 +297,13 @@ export function PaymentsSection() {
           if (!open) setEditingPayment(null);
         }}
         editData={editingPayment}
+      />
+
+      <ExcelUploadDialog
+        open={isExcelUploadOpen}
+        onOpenChange={setIsExcelUploadOpen}
+        type="payments"
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["payments"] })}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
