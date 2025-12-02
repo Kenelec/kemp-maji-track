@@ -12,10 +12,6 @@ interface DriverLocation {
   accuracy: number | null;
   timestamp: number | null;
   created_at: string;
-  users: {
-    name: string;
-    phone: string | null;
-  } | null;
 }
 
 interface DriverHistory {
@@ -26,10 +22,6 @@ interface DriverHistory {
   accuracy: number | null;
   timestamp: number | null;
   created_at: string;
-  users: {
-    name: string;
-    phone: string | null;
-  } | null;
 }
 
 export function AdminDriverTrackingMap() {
@@ -72,12 +64,9 @@ export function AdminDriverTrackingMap() {
     try {
       setLoading(true);
 
-      const {  locationsData, error } = await supabase
+      const { data: locationsData, error } = await supabase
         .from('driver_locations')
-        .select(`
-          *,
-          users!inner (name, phone)
-        `)
+        .select('*')
         .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // Last 30 minutes
         .order('created_at', { ascending: false });
 
@@ -105,10 +94,7 @@ export function AdminDriverTrackingMap() {
     try {
       let query = supabase
         .from('driver_locations')
-        .select(`
-          *,
-          users!inner (name, phone)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (startDate) {
@@ -121,7 +107,7 @@ export function AdminDriverTrackingMap() {
         query = query.eq('driver_id', driverId);
       }
 
-      const {  data, error } = await query;
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -181,7 +167,7 @@ export function AdminDriverTrackingMap() {
                   </div>
                   <div className="bg-white rounded-lg shadow-md p-2 mt-1 max-w-xs">
                     <div className="text-xs font-medium">
-                      {location.users?.name || 'Unknown Driver'}
+                      Driver {location.driver_id.substring(0, 8)}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
@@ -234,7 +220,7 @@ export function AdminDriverTrackingMap() {
                     <div key={location.id} className="border rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-medium truncate">
-                          {location.users?.name || 'Unknown Driver'}
+                          Driver {location.driver_id.substring(0, 8)}
                         </h3>
                         <Badge variant="secondary" className="text-xs">
                           <Clock className="w-3 h-3 mr-1" />
@@ -307,7 +293,7 @@ export function AdminDriverTrackingMap() {
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="font-medium text-sm">
-                          {location.users?.name || 'Unknown Driver'}
+                          Driver {location.driver_id.substring(0, 8)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}

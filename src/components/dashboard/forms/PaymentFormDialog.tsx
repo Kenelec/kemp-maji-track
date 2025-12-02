@@ -20,6 +20,7 @@ interface Delivery {
   total_amount: number;
   qty: number;
   unit_rate: number;
+  customer_id: string;
 }
 
 interface PaymentFormDialogProps {
