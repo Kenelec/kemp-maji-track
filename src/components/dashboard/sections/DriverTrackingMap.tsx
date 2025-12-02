@@ -27,10 +27,6 @@ interface DriverLocation {
   accuracy: number | null;
   timestamp: number | null;
   created_at: string;
-  users: {
-    name: string;
-    phone: string | null;
-  } | null;
 }
 
 interface Delivery {
@@ -107,19 +103,16 @@ export function DriverTrackingMap() {
       setLoading(true);
       
       // Fetch driver locations
-      const {  locationsData, error: locationsError } = await supabase
+      const { data: locationsData, error: locationsError } = await supabase
         .from('driver_locations')
-        .select(`
-          *,
-          users!inner (name, phone)
-        `)
+        .select('*')
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
         .order('created_at', { ascending: false });
 
       if (locationsError) throw locationsError;
 
       // Fetch deliveries
-      const {  deliveriesData, error: deliveriesError } = await supabase
+      const { data: deliveriesData, error: deliveriesError } = await supabase
         .from('deliveries')
         .select(`
           *,
@@ -130,7 +123,7 @@ export function DriverTrackingMap() {
       if (deliveriesError) throw deliveriesError;
 
       // Fetch payments
-      const {  paymentsData, error: paymentsError } = await supabase
+      const { data: paymentsData, error: paymentsError } = await supabase
         .from('payments')
         .select(`
           *,
@@ -247,7 +240,7 @@ export function DriverTrackingMap() {
                 </div>
                 <div className="bg-white rounded-lg shadow-md p-2 mt-1 max-w-xs">
                   <div className="text-xs font-medium">
-                    {location.users?.name || 'Unknown Driver'}
+                    Driver {location.driver_id.substring(0, 8)}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
@@ -363,7 +356,7 @@ export function DriverTrackingMap() {
                     </div>
                     <div>
                       <div className="font-medium text-sm">
-                        {location.users?.name || 'Unknown Driver'}
+                        Driver {location.driver_id.substring(0, 8)}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
@@ -401,7 +394,7 @@ export function DriverTrackingMap() {
                   <option value="all">All Drivers</option>
                   {driverLocations.map(loc => (
                     <option key={loc.driver_id} value={loc.driver_id}>
-                      {loc.users?.name || 'Unknown Driver'}
+                      Driver {loc.driver_id.substring(0, 8)}
                     </option>
                   ))}
                 </select>
@@ -515,17 +508,16 @@ export function DriverTrackingMap() {
                         </Badge>
                       </td>
                       <td className="py-2">
-                        {delivery.assigned_driver_id ? (
-                          <Badge variant="outline">
-                            <Navigation className="w-3 h-3 mr-1" />
-                            Assigned
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-red-600">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            Pending
-                          </Badge>
-                        )}
+                        <Badge variant="outline" className={
+                          delivery.delivery_status === 'delivered' ? 'text-green-600' :
+                          delivery.delivery_status === 'in_transit' ? 'text-blue-600' :
+                          'text-yellow-600'
+                        }>
+                          {delivery.delivery_status === 'delivered' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                          {delivery.delivery_status === 'in_transit' && <Navigation className="w-3 h-3 mr-1" />}
+                          {delivery.delivery_status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                          {delivery.delivery_status.replace('_', ' ')}
+                        </Badge>
                       </td>
                     </tr>
                   ))}
