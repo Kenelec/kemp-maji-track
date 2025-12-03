@@ -34,6 +34,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   const queryClient = useQueryClient();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [allDeliveries, setAllDeliveries] = useState<Delivery[]>([]);
   const [formData, setFormData] = useState({
     customer_id: "",
     delivery_id: "",
@@ -43,24 +44,32 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     mpesa_code: "",
   });
   const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
     if (open) {
-      fetchFormData();
-      if (editData) {
-        setFormData({
-          customer_id: editData.customer_id || "",
-          delivery_id: editData.delivery_id || "",
-          amount: editData.amount?.toString() || "",
-          due_date: editData.due_date?.split('T')[0] || "",
-          payment_method: editData.payment_method || "cash",
-          mpesa_code: editData.mpesa_code || "",
-        });
-      } else {
-        resetForm();
-      }
+      setDataLoaded(false);
+      fetchFormData().then(() => {
+        setDataLoaded(true);
+      });
     }
-  }, [open, editData]);
+  }, [open]);
+
+  // Populate form when editing and data is loaded
+  useEffect(() => {
+    if (open && dataLoaded && editData) {
+      setFormData({
+        customer_id: editData.customer_id || "",
+        delivery_id: editData.delivery_id || "",
+        amount: editData.amount?.toString() || "",
+        due_date: editData.due_date?.split('T')[0] || "",
+        payment_method: editData.payment_method || "cash",
+        mpesa_code: editData.mpesa_code || "",
+      });
+    } else if (open && !editData) {
+      resetForm();
+    }
+  }, [open, dataLoaded, editData]);
 
   const fetchFormData = async () => {
     try {
@@ -72,7 +81,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
       if (customersError) throw customersError;
 
-      // Fetch deliveries
+      // Fetch all deliveries
       const { data: deliveriesData, error: deliveriesError } = await supabase
         .from('deliveries')
         .select('id, delivery_date, total_amount, qty, unit_rate, customer_id')
@@ -81,6 +90,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       if (deliveriesError) throw deliveriesError;
 
       setCustomers(customersData || []);
+      setAllDeliveries(deliveriesData || []);
       setDeliveries(deliveriesData || []);
     } catch (error) {
       console.error('Error fetching form data', error);
@@ -98,19 +108,34 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     });
   };
 
-  const calculatePaymentStatus = (deliveryId: string, paymentAmount: number) => {
-    const delivery = deliveries.find(d => d.id === deliveryId);
+  // Returns only valid database status values: 'paid' or 'pending'
+  const calculatePaymentStatus = (deliveryId: string, paymentAmount: number): 'paid' | 'pending' => {
+    const delivery = allDeliveries.find(d => d.id === deliveryId);
     if (!delivery) return 'pending';
+
+    const deliveryAmount = Number(delivery.total_amount);
+    
+    if (paymentAmount >= deliveryAmount) {
+      return 'paid';
+    } else {
+      return 'pending';
+    }
+  };
+
+  // Calculate display info for status preview
+  const getPaymentStatusInfo = (deliveryId: string, paymentAmount: number) => {
+    const delivery = allDeliveries.find(d => d.id === deliveryId);
+    if (!delivery) return { status: 'pending', label: 'Pending', difference: 0 };
 
     const deliveryAmount = Number(delivery.total_amount);
     const diff = paymentAmount - deliveryAmount;
 
     if (diff > 0) {
-      return `${Math.abs(diff)} credit`;
+      return { status: 'paid', label: `Paid (Credit: KSh ${diff.toLocaleString()})`, difference: diff };
     } else if (diff < 0) {
-      return `${Math.abs(diff)} pending`;
+      return { status: 'pending', label: `Pending (Balance: KSh ${Math.abs(diff).toLocaleString()})`, difference: diff };
     } else {
-      return 'paid';
+      return { status: 'paid', label: 'Fully Paid', difference: 0 };
     }
   };
 
@@ -133,7 +158,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
             due_date: formData.due_date,
             payment_method: formData.payment_method,
             mpesa_code: formData.payment_method === 'mpesa' ? formData.mpesa_code : null,
-            status: status, // Status is calculated automatically
+            status: status,
             updated_at: new Date().toISOString()
           })
           .eq('id', editData.id);
@@ -155,11 +180,11 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
             due_date: formData.due_date,
             payment_method: formData.payment_method,
             mpesa_code: formData.payment_method === 'mpesa' ? formData.mpesa_code : null,
-            status: status, // Status is calculated automatically
+            status: status,
             created_at: new Date().toISOString()
           }])
           .select()
-          .single(); // Get the created payment data
+          .single();
 
         if (error) throw error;
 
@@ -169,7 +194,6 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           console.log('Payment notification sent to admins successfully');
         } catch (notifError) {
           console.error('Failed to send payment notification:', notifError);
-          // Don't throw - payment was created successfully
         }
 
         toast({
@@ -180,7 +204,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving payment:', error);
       toast({
         title: "Error",
@@ -192,7 +216,16 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     }
   };
 
-  const selectedDelivery = deliveries.find(d => d.id === formData.delivery_id);
+  // Get filtered deliveries for dropdown - show customer's deliveries OR the currently selected delivery
+  const filteredDeliveries = allDeliveries.filter(delivery => 
+    delivery.customer_id === formData.customer_id || 
+    (editData && delivery.id === editData.delivery_id)
+  );
+
+  const selectedDelivery = allDeliveries.find(d => d.id === formData.delivery_id);
+  const statusInfo = formData.delivery_id && formData.amount 
+    ? getPaymentStatusInfo(formData.delivery_id, Number(formData.amount))
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -206,7 +239,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
             <Label htmlFor="customer">Customer *</Label>
             <Select 
               value={formData.customer_id} 
-              onValueChange={(value) => setFormData({...formData, customer_id: value})}
+              onValueChange={(value) => setFormData({...formData, customer_id: value, delivery_id: ""})}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select customer" />
@@ -231,22 +264,20 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                 <SelectValue placeholder="Select delivery" />
               </SelectTrigger>
               <SelectContent>
-                {deliveries
-                  .filter(delivery => delivery.customer_id === formData.customer_id)
-                  .map(delivery => (
-                    <SelectItem key={delivery.id} value={delivery.id}>
-                      {delivery.delivery_date} - KSh {delivery.total_amount}
-                    </SelectItem>
-                  ))}
+                {filteredDeliveries.map(delivery => (
+                  <SelectItem key={delivery.id} value={delivery.id}>
+                    {delivery.delivery_date} - KSh {Number(delivery.total_amount).toLocaleString()}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           {selectedDelivery && (
             <div className="p-3 bg-muted rounded-md text-sm">
-              <div className="font-medium">Delivery Amount: KSh {selectedDelivery.total_amount}</div>
+              <div className="font-medium">Delivery Amount: KSh {Number(selectedDelivery.total_amount).toLocaleString()}</div>
               <div>Quantity: {selectedDelivery.qty}</div>
-              <div>Unit Rate: KSh {selectedDelivery.unit_rate}</div>
+              <div>Unit Rate: KSh {Number(selectedDelivery.unit_rate).toLocaleString()}</div>
             </div>
           )}
 
@@ -303,14 +334,13 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           )}
 
           {/* Show calculated status */}
-          {formData.delivery_id && formData.amount && (
+          {statusInfo && (
             <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-              <div className="font-medium text-blue-800">Calculated Status:</div>
-              <div className="text-blue-700">
-                {calculatePaymentStatus(formData.delivery_id, Number(formData.amount))}
-              </div>
+              <div className="font-medium text-blue-800">Payment Status:</div>
+              <div className="text-blue-700">{statusInfo.label}</div>
               <div className="text-xs text-blue-600 mt-1">
-                Based on delivery amount: KSh {selectedDelivery?.total_amount || 0} vs payment: KSh {formData.amount}
+                Delivery: KSh {selectedDelivery?.total_amount?.toLocaleString() || 0} | 
+                Payment: KSh {Number(formData.amount).toLocaleString()}
               </div>
             </div>
           )}

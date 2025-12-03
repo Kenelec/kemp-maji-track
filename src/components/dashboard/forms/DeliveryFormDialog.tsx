@@ -45,7 +45,6 @@ const deliverySchema = z.object({
   }),
   qty: z.string().min(1, "Quantity is required"),
   unit_rate: z.string().min(1, "Unit rate is required"),
-  delivery_status: z.string().default("delivered"),
   delivery_note_no: z.string().optional(),
 });
 
@@ -69,7 +68,6 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
       product_id: "",
       qty: "",
       unit_rate: "",
-      delivery_status: "delivered",
       delivery_note_no: "",
     },
   });
@@ -109,7 +107,6 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         delivery_date: new Date(editData.delivery_date),
         qty: editData.qty.toString(),
         unit_rate: editData.unit_rate.toString(),
-        delivery_status: editData.delivery_status,
         delivery_note_no: editData.delivery_note_no || "",
       });
     } else if (!open) {
@@ -118,7 +115,6 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         product_id: "",
         qty: "",
         unit_rate: "",
-        delivery_status: "delivered",
         delivery_note_no: "",
       });
     }
@@ -135,7 +131,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
       const productName = product?.name || "";
 
       if (editData) {
-        // Update delivery
+        // Update delivery - always set status to "delivered"
         const { error: deliveryError } = await supabase
           .from("deliveries")
           .update({
@@ -144,7 +140,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
             qty,
             unit_rate,
             total_amount,
-            delivery_status: data.delivery_status,
+            delivery_status: "delivered",
             delivery_note_no: data.delivery_note_no,
           })
           .eq("id", editData.id);
@@ -172,7 +168,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         
         if (insertItemError) throw insertItemError;
       } else {
-        // Insert delivery
+        // Insert delivery - always set status to "delivered"
         const { data: deliveryData, error: deliveryError } = await supabase
           .from("deliveries")
           .insert([{
@@ -181,7 +177,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
             qty,
             unit_rate,
             total_amount,
-            delivery_status: data.delivery_status,
+            delivery_status: "delivered",
             delivery_note_no: data.delivery_note_no,
             created_by_user: user?.id,
           }])
@@ -210,7 +206,6 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
           console.log('Delivery notification sent successfully');
         } catch (notifError) {
           console.error('Failed to send delivery notification:', notifError);
-          // Don't throw - delivery was created successfully
         }
       }
     },
@@ -244,7 +239,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         <DialogHeader>
           <DialogTitle>{editData ? "Edit Delivery" : "New Delivery"}</DialogTitle>
           <DialogDescription>
-            {editData ? "Update delivery information" : "Schedule a new water delivery"}
+            {editData ? "Update delivery information" : "Record a new water delivery"}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -255,7 +250,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Customer</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a customer" />
@@ -279,7 +274,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Product</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a product" />
@@ -371,27 +366,6 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
                   <FormControl>
                     <Input type="number" step="0.01" placeholder="0.00" {...field} />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="delivery_status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-            <SelectContent>
-              <SelectItem value="delivered">Delivered</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
