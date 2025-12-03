@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { useState } from "react";
-import { AlertCircle, CreditCard } from "lucide-react";
+import { AlertCircle, CreditCard, Clock } from "lucide-react";
 
 interface OverduePaymentsDialogProps {
   open: boolean;
@@ -49,7 +49,7 @@ interface PaymentWithDetails {
 }
 
 export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDialogProps) {
-  const [filter, setFilter] = useState<"all" | "overdue" | "credit">("all");
+  const [filter, setFilter] = useState<"all" | "overdue" | "pending" | "credit">("all");
 
   // Fetch payments with customer and delivery details
   const { data: paymentsData, isLoading } = useQuery({
@@ -94,15 +94,17 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
     enabled: open,
   });
 
-  // Calculate derived status (overdue vs credit)
+  // Calculate derived status (overdue, pending with balance, or credit)
   const processedPayments = (paymentsData || []).map((payment) => {
     const deliveryTotal = payment.deliveries?.total_amount || 0;
     const paidAmount = payment.amount || 0;
-    const difference = deliveryTotal - paidAmount;
+    const difference = deliveryTotal - paidAmount; // positive = balance due, negative = credit
 
     let derivedStatus = payment.status;
-    if (payment.status === "pending" && difference < 0) {
+    if (difference < 0) {
       derivedStatus = "credit"; // Overpayment
+    } else if (difference > 0 && payment.status === "pending") {
+      derivedStatus = "pending_balance"; // Partial payment
     }
 
     return {
@@ -117,15 +119,17 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
   const filteredPayments = processedPayments.filter((payment) => {
     if (filter === "all") return true;
     if (filter === "overdue") return payment.status === "overdue";
+    if (filter === "pending") return payment.derivedStatus === "pending_balance" || (payment.status === "pending" && payment.difference > 0);
     if (filter === "credit") return payment.derivedStatus === "credit";
     return true;
   });
 
-  // Calculate totals
-  const totalOverdue = filteredPayments
-    .filter((p) => p.status === "overdue")
-    .reduce((sum, p) => sum + Math.abs(p.difference), 0);
-  const totalCredit = filteredPayments
+  // Calculate totals - include both overdue AND pending balances in totalOverdue
+  const totalOverdue = processedPayments
+    .filter((p) => p.status === "overdue" || (p.difference > 0))
+    .reduce((sum, p) => sum + Math.max(0, p.difference), 0);
+    
+  const totalCredit = processedPayments
     .filter((p) => p.derivedStatus === "credit")
     .reduce((sum, p) => sum + Math.abs(p.difference), 0);
 
@@ -138,7 +142,7 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
             Overdue & Credit Payments Details
           </DialogTitle>
           <DialogDescription>
-            Detailed view of all overdue payments and customer credits
+            Detailed view of all overdue payments, pending balances, and customer credits
           </DialogDescription>
         </DialogHeader>
 
@@ -147,18 +151,20 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="text-sm text-muted-foreground">Total Overdue</div>
+                <div className="text-sm text-muted-foreground">Total Outstanding</div>
                 <div className="text-2xl font-bold text-destructive">
                   KSh {totalOverdue.toLocaleString()}
                 </div>
+                <div className="text-xs text-muted-foreground mt-1">Overdue + Pending balances</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
                 <div className="text-sm text-muted-foreground">Total Credits</div>
-                <div className="text-2xl font-bold text-accent">
+                <div className="text-2xl font-bold text-green-600">
                   KSh {totalCredit.toLocaleString()}
                 </div>
+                <div className="text-xs text-muted-foreground mt-1">Customer overpayments</div>
               </CardContent>
             </Card>
             <Card>
@@ -181,6 +187,7 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
               <SelectContent>
                 <SelectItem value="all">All Payments</SelectItem>
                 <SelectItem value="overdue">Overdue Only</SelectItem>
+                <SelectItem value="pending">Pending Balance</SelectItem>
                 <SelectItem value="credit">Credits Only</SelectItem>
               </SelectContent>
             </Select>
@@ -203,7 +210,7 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
                     <TableHead>Products</TableHead>
                     <TableHead className="text-right">Delivery Total</TableHead>
                     <TableHead className="text-right">Amount Paid</TableHead>
-                    <TableHead className="text-right">Difference</TableHead>
+                    <TableHead className="text-right">Balance/Credit</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Due Date</TableHead>
                   </TableRow>
@@ -251,11 +258,11 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
                             payment.difference > 0
                               ? "text-destructive font-semibold"
                               : payment.difference < 0
-                              ? "text-accent font-semibold"
+                              ? "text-green-600 font-semibold"
                               : "text-muted-foreground"
                           }
                         >
-                          {payment.difference > 0 && "+"}
+                          {payment.difference > 0 ? "Due: " : payment.difference < 0 ? "Credit: " : ""}
                           KSh {Math.abs(payment.difference).toLocaleString()}
                         </span>
                       </TableCell>
@@ -266,12 +273,17 @@ export function OverduePaymentsDialog({ open, onOpenChange }: OverduePaymentsDia
                             Overdue
                           </Badge>
                         ) : payment.derivedStatus === "credit" ? (
-                          <Badge variant="secondary" className="gap-1 bg-accent/10 text-accent">
+                          <Badge variant="secondary" className="gap-1 bg-green-100 text-green-700">
                             <CreditCard className="w-3 h-3" />
                             Credit
                           </Badge>
+                        ) : payment.difference > 0 ? (
+                          <Badge variant="outline" className="gap-1 text-orange-600 border-orange-300">
+                            <Clock className="w-3 h-3" />
+                            Pending
+                          </Badge>
                         ) : (
-                          <Badge variant="outline">Pending</Badge>
+                          <Badge variant="outline">Paid</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-sm">

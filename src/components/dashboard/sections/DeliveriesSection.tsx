@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DeliveryFormDialog } from "../forms/DeliveryFormDialog";
@@ -37,6 +36,7 @@ export function DeliveriesSection() {
           *,
           customers (customer_name),
           delivery_items (
+            product_id,
             product_name,
             quantity
           )
@@ -90,21 +90,6 @@ export function DeliveriesSection() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "scheduled":
-        return "bg-blue-500/10 text-blue-500";
-      case "dispatched":
-        return "bg-yellow-500/10 text-yellow-500";
-      case "delivered":
-        return "bg-green-500/10 text-green-500";
-      case "cancelled":
-        return "bg-red-500/10 text-red-500";
-      default:
-        return "bg-gray-500/10 text-gray-500";
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -141,7 +126,6 @@ export function DeliveriesSection() {
                   <TableHead>Quantity</TableHead>
                   <TableHead>Unit Rate</TableHead>
                   <TableHead>Total Amount</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -165,11 +149,6 @@ export function DeliveriesSection() {
                     <TableCell>{delivery.qty}</TableCell>
                     <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
                     <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusColor(delivery.delivery_status)}>
-                        {delivery.delivery_status}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
