@@ -216,3 +216,51 @@
     transform: translateY(-5px);
   }
 }
+
+/* Print styles for Payment History export */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  .payment-history-print,
+  .payment-history-print * {
+    visibility: visible;
+  }
+  
+  .payment-history-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 20px;
+  }
+  
+  .print\:hidden {
+    display: none !important;
+  }
+  
+  /* Clean up dialog styles for print */
+  .payment-history-print [data-radix-dialog-overlay],
+  .payment-history-print [data-radix-dialog-close] {
+    display: none !important;
+  }
+  
+  /* Ensure table fits on page */
+  .payment-history-print table {
+    font-size: 12px;
+    width: 100%;
+  }
+  
+  /* Cards in a row for print */
+  .payment-history-print .grid {
+    display: flex;
+    gap: 16px;
+  }
+  
+  .payment-history-print .grid > * {
+    flex: 1;
+  }
+}
