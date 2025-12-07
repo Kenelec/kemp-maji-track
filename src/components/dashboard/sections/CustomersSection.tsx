@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CustomerFormDialog } from "../forms/CustomerFormDialog";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
+import { CustomerPaymentHistoryDialog } from "./CustomerPaymentHistoryDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,7 @@ export function CustomersSection() {
   const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [historyCustomer, setHistoryCustomer] = useState<any>(null);
 
   const { data: customers, isLoading } = useQuery({
     queryKey: ["customers"],
@@ -131,6 +133,14 @@ export function CustomersSection() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => setHistoryCustomer(customer)}
+                        title="View History"
+                      >
+                        <History className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleEdit(customer)}
                       >
                         <Pencil className="w-4 h-4" />
@@ -162,6 +172,12 @@ export function CustomersSection() {
         onOpenChange={setIsExcelUploadOpen}
         type="customers"
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customers"] })}
+      />
+
+      <CustomerPaymentHistoryDialog
+        open={!!historyCustomer}
+        onOpenChange={(open) => !open && setHistoryCustomer(null)}
+        customer={historyCustomer}
       />
 
       <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
