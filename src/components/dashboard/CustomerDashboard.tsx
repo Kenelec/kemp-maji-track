@@ -14,10 +14,12 @@ import {
   DollarSign,
   Calendar,
   Menu,
-  X
+  X,
+  FileText
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CustomerPaymentsSection } from "./sections/CustomerPaymentsSection";
+import { CustomerStatementsSection } from "./sections/CustomerStatementsSection";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -66,6 +68,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     { id: "overview", label: "Overview", icon: Eye },
     { id: "deliveries", label: "My Deliveries", icon: Truck },
     { id: "payments", label: "My Payments", icon: CreditCard },
+    { id: "statements", label: "My Statements", icon: FileText },
   ];
 
   return (
@@ -275,6 +278,8 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
               </Card>
             </div>
           )}
+
+          {activeTab === "statements" && <CustomerStatementsSection />}
         </main>
       </div>
     </div>

@@ -20,8 +20,8 @@ import { CustomersSection } from "./sections/CustomersSection";
 import { ProductsSection } from "./sections/ProductsSection";
 import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
-import { AdminDriverTrackingMap } from "./sections/AdminDriverTrackingMap"; // Add this import
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminDriverTrackingMap } from "./sections/AdminDriverTrackingMap";
+import { BulkExportSection } from "./sections/BulkExportSection";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 import { NotificationCenter } from "./NotificationCenter";
 
@@ -184,55 +184,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
           {activeTab === "payments" && <PaymentsSection />}
           {activeTab === "customers" && <CustomersSection />}
           {activeTab === "products" && <ProductsSection />}
-          {activeTab === "exports" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Export Data</h2>
-                <p className="text-muted-foreground">Download reports and data exports</p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Deliveries Report</CardTitle>
-                    <CardDescription>Export delivery data with filters</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button variant="outline" className="w-full">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Payments Report</CardTitle>
-                    <CardDescription>Export payment records</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button variant="outline" className="w-full">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Customers Report</CardTitle>
-                    <CardDescription>Export customer database</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button variant="outline" className="w-full">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
+          {activeTab === "exports" && <BulkExportSection />}
         </main>
       </div>
     </div>
