@@ -919,8 +919,8 @@ export type Database = {
       get_user_role: { Args: { user_uuid: string }; Returns: string }
       mark_overdue_payments: { Args: never; Returns: undefined }
       user_can_view_delivery:
-        | { Args: { p_delivery: string; p_user: string }; Returns: boolean }
         | { Args: { p_delivery_id: string }; Returns: boolean }
+        | { Args: { p_delivery: string; p_user: string }; Returns: boolean }
     }
     Enums: {
       app_role: "MasterAdmin" | "Admin" | "Customer"
