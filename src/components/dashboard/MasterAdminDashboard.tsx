@@ -28,6 +28,7 @@ import { DashboardSection } from "./sections/DashboardSection";
 import { SystemSettingsSection } from "./sections/SystemSettingsSection";
 import { DriverTrackingMap } from "./sections/DriverTrackingMap";
 import { BulkExportSection } from "./sections/BulkExportSection";
+import { DriversSection } from "./sections/DriversSection";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 import { NotificationCenter } from "./NotificationCenter";
 
@@ -267,6 +268,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
     { id: "payments", label: "Payments", icon: CreditCard },
     { id: "customers", label: "Customers", icon: Users },
     { id: "products", label: "Products", icon: Package },
+    { id: "drivers", label: "Drivers", icon: Truck },
     { id: "settings", label: "Settings", icon: Settings },
     { id: "exports", label: "Exports", icon: Download },
   ];
@@ -504,6 +506,8 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
         return <CustomersSection />;
       case "products":
         return <ProductsSection />;
+      case "drivers":
+        return <DriversSection />;
       case "settings":
         return <SystemSettingsSection />;
       case "exports":

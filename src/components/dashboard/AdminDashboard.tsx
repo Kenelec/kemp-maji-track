@@ -22,6 +22,7 @@ import { DeliveriesSection } from "./sections/DeliveriesSection";
 import { PaymentsSection } from "./sections/PaymentsSection";
 import { AdminDriverTrackingMap } from "./sections/AdminDriverTrackingMap";
 import { BulkExportSection } from "./sections/BulkExportSection";
+import { DriversSection } from "./sections/DriversSection";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 import { NotificationCenter } from "./NotificationCenter";
 
@@ -115,6 +116,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     { id: "payments", label: "Payments", icon: CreditCard },
     { id: "customers", label: "Customers", icon: Users },
     { id: "products", label: "Products", icon: Package },
+    { id: "drivers", label: "Drivers", icon: Truck },
     { id: "exports", label: "Exports", icon: Download },
   ];
 
@@ -184,6 +186,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
           {activeTab === "payments" && <PaymentsSection />}
           {activeTab === "customers" && <CustomersSection />}
           {activeTab === "products" && <ProductsSection />}
+          {activeTab === "drivers" && <DriversSection />}
           {activeTab === "exports" && <BulkExportSection />}
         </main>
       </div>

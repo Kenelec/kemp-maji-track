@@ -35,6 +35,7 @@ export function DeliveriesSection() {
         .select(`
           *,
           customers (customer_name),
+          drivers (name, vehicle_number),
           delivery_items (
             product_id,
             product_name,
@@ -121,6 +122,7 @@ export function DeliveriesSection() {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Delivery Date</TableHead>
+                  <TableHead>Driver</TableHead>
                   <TableHead>Delivery Note No.</TableHead>
                   <TableHead>Products</TableHead>
                   <TableHead>Quantity</TableHead>
@@ -136,6 +138,9 @@ export function DeliveriesSection() {
                       {delivery.customers?.customer_name || "Unknown"}
                     </TableCell>
                     <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
+                    <TableCell>
+                      {(delivery as any).drivers?.name || "—"}
+                    </TableCell>
                     <TableCell>{delivery.delivery_note_no || "—"}</TableCell>
                     <TableCell>
                       {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
