@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 const deliverySchema = z.object({
   customer_id: z.string().min(1, "Customer is required"),
   product_id: z.string().min(1, "Product is required"),
+  driver_id: z.string().optional(),
   delivery_date: z.date({
     required_error: "Delivery date is required",
   }),
@@ -66,6 +67,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
     defaultValues: {
       customer_id: "",
       product_id: "",
+      driver_id: "",
       qty: "",
       unit_rate: "",
       delivery_note_no: "",
@@ -98,12 +100,27 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
     },
   });
 
+  const { data: drivers } = useQuery({
+    queryKey: ["drivers"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("drivers")
+        .select("*")
+        .eq("is_active", true)
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   useEffect(() => {
     if (editData && open) {
       const productId = editData.delivery_items?.[0]?.product_id || "";
       form.reset({
         customer_id: editData.customer_id,
         product_id: productId,
+        driver_id: editData.driver_id || "",
         delivery_date: new Date(editData.delivery_date),
         qty: editData.qty.toString(),
         unit_rate: editData.unit_rate.toString(),
@@ -113,6 +130,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
       form.reset({
         customer_id: "",
         product_id: "",
+        driver_id: "",
         qty: "",
         unit_rate: "",
         delivery_note_no: "",
@@ -136,6 +154,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
           .from("deliveries")
           .update({
             customer_id: data.customer_id,
+            driver_id: data.driver_id || null,
             delivery_date: format(data.delivery_date, "yyyy-MM-dd"),
             qty,
             unit_rate,
@@ -173,6 +192,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
           .from("deliveries")
           .insert([{
             customer_id: data.customer_id,
+            driver_id: data.driver_id || null,
             delivery_date: format(data.delivery_date, "yyyy-MM-dd"),
             qty,
             unit_rate,
@@ -284,6 +304,30 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
                       {products?.map((product) => (
                         <SelectItem key={product.id} value={product.id}>
                           {product.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="driver_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Driver (Optional)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a driver" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {drivers?.map((driver) => (
+                        <SelectItem key={driver.id} value={driver.id}>
+                          {driver.name} {driver.vehicle_number ? `(${driver.vehicle_number})` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>

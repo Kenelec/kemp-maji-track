@@ -199,6 +199,7 @@ export type Database = {
           discrepancy_resolved: boolean | null
           discrepancy_resolved_at: string | null
           discrepancy_resolved_by: string | null
+          driver_id: string | null
           id: string
           last_reminder_sent_at: string | null
           mpesa_transaction_id: string | null
@@ -223,6 +224,7 @@ export type Database = {
           discrepancy_resolved?: boolean | null
           discrepancy_resolved_at?: string | null
           discrepancy_resolved_by?: string | null
+          driver_id?: string | null
           id?: string
           last_reminder_sent_at?: string | null
           mpesa_transaction_id?: string | null
@@ -247,6 +249,7 @@ export type Database = {
           discrepancy_resolved?: boolean | null
           discrepancy_resolved_at?: string | null
           discrepancy_resolved_by?: string | null
+          driver_id?: string | null
           id?: string
           last_reminder_sent_at?: string | null
           mpesa_transaction_id?: string | null
@@ -272,6 +275,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
             referencedColumns: ["id"]
           },
         ]
@@ -515,6 +525,36 @@ export type Database = {
           latitude?: number
           longitude?: number
           timestamp?: number | null
+        }
+        Relationships: []
+      }
+      drivers: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          phone: string | null
+          updated_at: string | null
+          vehicle_number: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          phone?: string | null
+          updated_at?: string | null
+          vehicle_number?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          phone?: string | null
+          updated_at?: string | null
+          vehicle_number?: string | null
         }
         Relationships: []
       }
