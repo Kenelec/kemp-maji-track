@@ -188,8 +188,13 @@ export type Database = {
       }
       deliveries: {
         Row: {
+          auto_confirmed: boolean | null
+          confirmation_deadline: string | null
+          confirmation_reminder_sent: boolean | null
+          confirmed_at: string | null
           created_at: string | null
           created_by_user: string
+          customer_confirmed: boolean | null
           customer_id: string
           delivery_date: string
           delivery_note_no: string | null
@@ -213,8 +218,13 @@ export type Database = {
           unit_rate: number
         }
         Insert: {
+          auto_confirmed?: boolean | null
+          confirmation_deadline?: string | null
+          confirmation_reminder_sent?: boolean | null
+          confirmed_at?: string | null
           created_at?: string | null
           created_by_user: string
+          customer_confirmed?: boolean | null
           customer_id: string
           delivery_date: string
           delivery_note_no?: string | null
@@ -238,8 +248,13 @@ export type Database = {
           unit_rate: number
         }
         Update: {
+          auto_confirmed?: boolean | null
+          confirmation_deadline?: string | null
+          confirmation_reminder_sent?: boolean | null
+          confirmed_at?: string | null
           created_at?: string | null
           created_by_user?: string
+          customer_confirmed?: boolean | null
           customer_id?: string
           delivery_date?: string
           delivery_note_no?: string | null

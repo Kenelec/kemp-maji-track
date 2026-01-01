@@ -1,11 +1,8 @@
 const kempLogo = "/kemp-logo.png";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { 
   LogOut, 
   Truck, 
@@ -15,23 +12,73 @@ import {
   Calendar,
   Menu,
   X,
-  FileText
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Clock
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CustomerPaymentsSection } from "./sections/CustomerPaymentsSection";
 import { CustomerStatementsSection } from "./sections/CustomerStatementsSection";
-import { useQuery } from "@tanstack/react-query";
+import { CustomerDeliveriesSection } from "./sections/CustomerDeliveriesSection";
+import { CustomerMpesaPaymentForm } from "./sections/CustomerMpesaPaymentForm";
+import { CustomerDeliveryDiscrepancyDialog } from "./sections/CustomerDeliveryDiscrepancyDialog";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { format, differenceInDays, isBefore } from "date-fns";
+import { toast } from "@/hooks/use-toast";
 
 interface CustomerDashboardProps {
   onLogout: () => void;
 }
 
+interface LastDeliveryData {
+  id: string;
+  delivery_date: string;
+  total_amount: number;
+  qty: number;
+  customer_confirmed: boolean;
+  confirmed_at: string | null;
+  confirmation_deadline: string | null;
+  auto_confirmed: boolean;
+  delivery_items?: Array<{
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
+}
+
 const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
   const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
-  const [mpesaCode, setMpesaCode] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [discrepancyDelivery, setDiscrepancyDelivery] = useState<LastDeliveryData | null>(null);
+  const queryClient = useQueryClient();
+
+  // Fetch last delivery
+  const { data: lastDelivery } = useQuery({
+    queryKey: ["last-delivery"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("deliveries")
+        .select("id, delivery_date, total_amount, qty, customer_confirmed, confirmed_at, confirmation_deadline, auto_confirmed")
+        .order("delivery_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      // Get delivery items
+      const { data: items } = await supabase
+        .from("delivery_items")
+        .select("product_name, quantity, unit_price, total_price")
+        .eq("delivery_id", data.id);
+
+      return { ...data, delivery_items: items || [] } as LastDeliveryData;
+    },
+  });
 
   // Fetch customer stats
   const { data: deliveriesCount } = useQuery({
@@ -50,14 +97,83 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payments")
-        .select("*")
+        .select("*, deliveries(total_amount)")
         .in("status", ["pending", "overdue"]);
       if (error) throw error;
       return data || [];
     },
   });
 
-  const totalPending = pendingPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+  const { data: paidPaymentsCount } = useQuery({
+    queryKey: ["customer-paid-payments-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("payments")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "paid");
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  // Calculate outstanding balance properly
+  const totalOutstanding = pendingPayments?.reduce((sum, p) => {
+    const deliveryTotal = (p.deliveries as any)?.total_amount || 0;
+    const paidAmount = p.amount || 0;
+    const balance = deliveryTotal - paidAmount;
+    return sum + (balance > 0 ? balance : 0);
+  }, 0) || 0;
+
+  // Confirm delivery mutation
+  const confirmDeliveryMutation = useMutation({
+    mutationFn: async (deliveryId: string) => {
+      const { error } = await supabase
+        .from("deliveries")
+        .update({
+          customer_confirmed: true,
+          confirmed_at: new Date().toISOString(),
+        })
+        .eq("id", deliveryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Delivery Confirmed",
+        description: "Thank you for confirming your delivery.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["last-delivery"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to confirm delivery. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const canConfirmDelivery = (delivery: LastDeliveryData) => {
+    if (delivery.customer_confirmed || delivery.auto_confirmed) return false;
+    if (!delivery.confirmation_deadline) return true;
+    return isBefore(new Date(), new Date(delivery.confirmation_deadline));
+  };
+
+  const getConfirmationStatus = (delivery: LastDeliveryData) => {
+    if (delivery.customer_confirmed) {
+      return { label: "Confirmed", icon: CheckCircle, color: "text-green-600" };
+    }
+    if (delivery.auto_confirmed) {
+      return { label: "Auto-confirmed", icon: Clock, color: "text-muted-foreground" };
+    }
+    if (delivery.confirmation_deadline) {
+      const daysLeft = differenceInDays(new Date(delivery.confirmation_deadline), new Date());
+      if (daysLeft < 0) {
+        return { label: "Expired", icon: AlertCircle, color: "text-destructive" };
+      }
+      return { label: `${daysLeft + 1}d left to confirm`, icon: Clock, color: "text-yellow-600" };
+    }
+    return { label: "Pending", icon: Clock, color: "text-yellow-600" };
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -89,18 +205,18 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
       <header className="border-b bg-card md:ml-64">
         <div className="flex h-16 items-center justify-between px-4 md:px-6">
           <div className="flex items-center space-x-3">
-  <img 
-    src={kempLogo} 
-    alt="KEMP Logo" 
-    className="w-8 h-8 md:w-10 md:h-10 object-contain"
-  />
-  <div>
-    <h1 className="text-lg md:text-xl font-bold text-primary">KEMP Maji Track</h1>
-    <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-xs md:text-sm ml-0">
-      Customer
-    </Badge>
-  </div>
-</div>
+            <img 
+              src={kempLogo} 
+              alt="KEMP Logo" 
+              className="w-8 h-8 md:w-10 md:h-10 object-contain"
+            />
+            <div>
+              <h1 className="text-lg md:text-xl font-bold text-primary">KEMP Maji Track</h1>
+              <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-xs md:text-sm ml-0">
+                Customer
+              </Badge>
+            </div>
+          </div>
           <div className="flex items-center space-x-2">
             <span className="text-sm text-muted-foreground hidden md:block">
               Welcome, {user?.email?.split('@')[0] || 'User'}
@@ -146,7 +262,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                   className="w-full justify-start"
                   onClick={() => {
                     setActiveTab(item.id);
-                    setSidebarOpen(false); // Close sidebar after selection on mobile
+                    setSidebarOpen(false);
                   }}
                 >
                   <Icon className="w-4 h-4 mr-3" />
@@ -166,71 +282,139 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                 <p className="text-sm md:text-muted-foreground">Welcome to your water delivery portal</p>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                <Card className="p-4">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Deliveries</CardTitle>
-                    <Truck className="h-4 w-4 text-muted-foreground" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Last Delivery Card */}
+                <Card className="md:col-span-2">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-primary" />
+                      Last Delivery
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-xl md:text-2xl font-bold">{deliveriesCount || 0}</div>
-                    <p className="text-xs text-muted-foreground">
-                      All time deliveries
-                    </p>
-                  </CardContent>
-                </Card>
-                
-                <Card className="p-4">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xl md:text-2xl font-bold">KSh {totalPending.toLocaleString()}</div>
-                    <p className="text-xs text-muted-foreground">
-                      {pendingPayments?.length || 0} pending payment{pendingPayments?.length !== 1 ? "s" : ""}
-                    </p>
-                  </CardContent>
-                </Card>
-                
-                <Card className="p-4">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Next Delivery</CardTitle>
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xl md:text-2xl font-bold">-</div>
-                    <p className="text-xs text-muted-foreground">
-                      No scheduled deliveries
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
+                    {lastDelivery ? (
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-lg font-bold">
+                              {format(new Date(lastDelivery.delivery_date), "MMM d, yyyy")}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {lastDelivery.delivery_items?.map(i => `${i.product_name} x${i.quantity}`).join(", ") || `${lastDelivery.qty} units`}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-bold text-primary">
+                              KSh {Number(lastDelivery.total_amount).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Confirmation Status */}
+                        {(() => {
+                          const status = getConfirmationStatus(lastDelivery);
+                          const StatusIcon = status.icon;
+                          return (
+                            <div className={`flex items-center gap-2 text-sm ${status.color}`}>
+                              <StatusIcon className="w-4 h-4" />
+                              <span>{status.label}</span>
+                            </div>
+                          );
+                        })()}
 
-          {activeTab === "deliveries" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl md:text-2xl font-bold text-foreground">My Deliveries</h2>
-                <p className="text-sm md:text-muted-foreground">Track your water delivery history</p>
+                        {/* Action Buttons */}
+                        {canConfirmDelivery(lastDelivery) && (
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => confirmDeliveryMutation.mutate(lastDelivery.id)}
+                              disabled={confirmDeliveryMutation.isPending}
+                            >
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Confirm Delivery
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive border-destructive hover:bg-red-50"
+                              onClick={() => setDiscrepancyDelivery(lastDelivery)}
+                            >
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              Report Issue
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No deliveries yet
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Total Deliveries */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-muted-foreground" />
+                      Total Deliveries
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{deliveriesCount || 0}</div>
+                    <p className="text-xs text-muted-foreground">All time</p>
+                  </CardContent>
+                </Card>
+
+                {/* Paid Payments */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      Payments Made
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">{paidPaymentsCount || 0}</div>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </CardContent>
+                </Card>
               </div>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Delivery History</CardTitle>
-                  <CardDescription>
-                    View your past and upcoming deliveries
-                  </CardDescription>
+
+              {/* Outstanding Payments Card */}
+              <Card className="border-destructive/50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-destructive" />
+                    Outstanding Balance
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    No deliveries found. Your delivery history will appear here.
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="text-2xl font-bold text-destructive">
+                        KSh {totalOutstanding.toLocaleString()}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {pendingPayments?.length || 0} pending payment{(pendingPayments?.length || 0) !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => setActiveTab("payments")}
+                      className="bg-gradient-primary"
+                    >
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Pay Now
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             </div>
           )}
+
+          {activeTab === "deliveries" && <CustomerDeliveriesSection />}
 
           {activeTab === "payments" && (
             <div className="space-y-6">
@@ -240,48 +424,23 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
               </div>
               
               <CustomerPaymentsSection />
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Submit M-Pesa Payment</CardTitle>
-                  <CardDescription>
-                    Submit your M-Pesa transaction code after making payment
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="mpesa-code">M-Pesa Transaction Code</Label>
-                    <Input
-                      id="mpesa-code"
-                      placeholder="Enter M-Pesa code (e.g., QJ23HGKL)"
-                      value={mpesaCode}
-                      onChange={(e) => setMpesaCode(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="payment-notes">Additional Notes (Optional)</Label>
-                    <Textarea
-                      id="payment-notes"
-                      placeholder="Any additional information about the payment"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button className="bg-gradient-primary w-full sm:w-auto">
-                      Submit M-Pesa Code
-                    </Button>
-                    <Button variant="outline" className="w-full sm:w-auto">
-                      Pay by Cash (Notify Admin)
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <CustomerMpesaPaymentForm />
             </div>
           )}
 
           {activeTab === "statements" && <CustomerStatementsSection />}
         </main>
       </div>
+
+      {/* Discrepancy Dialog */}
+      <CustomerDeliveryDiscrepancyDialog
+        delivery={discrepancyDelivery}
+        onClose={() => setDiscrepancyDelivery(null)}
+        onSuccess={() => {
+          setDiscrepancyDelivery(null);
+          queryClient.invalidateQueries({ queryKey: ["last-delivery"] });
+        }}
+      />
     </div>
   );
 };
