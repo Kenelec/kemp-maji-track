@@ -3,13 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
-import { Users, Truck, DollarSign, AlertCircle, CreditCard } from "lucide-react";
+import { Users, Truck, AlertCircle, CreditCard } from "lucide-react";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from "date-fns";
 import { OverduePaymentsDialog } from "./OverduePaymentsDialog";
 
 export function DashboardSection() {
   const [deliveryPeriod, setDeliveryPeriod] = useState("today");
   const [paymentPeriod, setPaymentPeriod] = useState("today");
+  const [mpesaPeriod, setMpesaPeriod] = useState("today");
   const [overdueDialogOpen, setOverdueDialogOpen] = useState(false);
 
   const getDateRange = (period: string) => {
@@ -79,25 +80,51 @@ export function DashboardSection() {
     },
   });
 
-  const { data: overduePayments } = useQuery({
-    queryKey: ["overdue-payments"],
+  const { data: mpesaPaymentsData } = useQuery({
+    queryKey: ["mpesa-payments-stats", mpesaPeriod],
+    queryFn: async () => {
+      const dateRange = getDateRange(mpesaPeriod);
+      let query = supabase.from("payments")
+        .select("*")
+        .eq("payment_method", "mpesa")
+        .eq("status", "paid");
+      
+      if (dateRange) {
+        query = query
+          .gte("created_at", dateRange.start.toISOString())
+          .lte("created_at", dateRange.end.toISOString());
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: outstandingPayments } = useQuery({
+    queryKey: ["outstanding-payments"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payments")
-        .select("*, customers(customer_name)")
-        .eq("status", "overdue");
+        .select("*, customers(customer_name), deliveries(total_amount)")
+        .in("status", ["overdue", "pending"]);
       if (error) throw error;
       return data || [];
     },
   });
 
   const cashPayments = paymentsData?.filter(p => p.payment_method === "cash" && p.status === "paid") || [];
-  const mpesaPayments = paymentsData?.filter(p => p.payment_method === "mpesa" && p.status === "paid") || [];
-  
   const cashTotal = cashPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  const mpesaTotal = mpesaPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  const overdueTotal = overduePayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
-  const uniqueOverdueCustomers = new Set(overduePayments?.map(p => p.customer_id) || []).size;
+  const mpesaTotal = mpesaPaymentsData?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+  
+  // Calculate outstanding total (delivery amount - paid amount)
+  const outstandingTotal = outstandingPayments?.reduce((sum, p) => {
+    const deliveryTotal = Number(p.deliveries?.total_amount || 0);
+    const paidAmount = Number(p.amount || 0);
+    const balance = deliveryTotal - paidAmount;
+    return sum + (balance > 0 ? balance : 0);
+  }, 0) || 0;
+  const uniqueOutstandingCustomers = new Set(outstandingPayments?.map(p => p.customer_id) || []).size;
 
   return (
     <div className="space-y-3">
@@ -182,6 +209,20 @@ export function DashboardSection() {
               <CreditCard className="w-4 h-4 text-accent" />
               M-Pesa
             </CardTitle>
+            <CardDescription className="mt-1">
+              <Select value={mpesaPeriod} onValueChange={setMpesaPeriod}>
+                <SelectTrigger className="w-full h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="this-week">This Week</SelectItem>
+                  <SelectItem value="this-month">This Month</SelectItem>
+                  <SelectItem value="this-year">This Year</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-3 pt-0">
             <div className="text-xl font-bold text-accent">KSh {mpesaTotal.toLocaleString()}</div>
@@ -189,7 +230,7 @@ export function DashboardSection() {
         </Card>
       </div>
 
-      {/* Overdue Payments - Full Width */}
+      {/* Outstanding Payments - Full Width */}
       <Card 
         className="cursor-pointer hover:shadow-lg transition-shadow"
         onClick={() => setOverdueDialogOpen(true)}
@@ -197,14 +238,14 @@ export function DashboardSection() {
         <CardHeader className="p-3">
           <CardTitle className="flex items-center gap-2 text-sm">
             <AlertCircle className="w-4 h-4 text-destructive" />
-            Payments Overdue • Click to view details
+            Outstanding Payments • Click to view details
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-0">
           <div className="flex items-center justify-between">
-            <div className="text-2xl font-bold text-destructive">KSh {overdueTotal.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-destructive">KSh {outstandingTotal.toLocaleString()}</div>
             <div className="text-sm text-muted-foreground">
-              {overduePayments?.length || 0} payments • {uniqueOverdueCustomers} customers
+              {outstandingPayments?.length || 0} payments • {uniqueOutstandingCustomers} customers
             </div>
           </div>
         </CardContent>

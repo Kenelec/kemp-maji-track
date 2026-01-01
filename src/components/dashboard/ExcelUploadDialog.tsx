@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface ExcelUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  type: 'customers' | 'payments';
+  type: 'customers' | 'payments' | 'deliveries';
   onSuccess: () => void;
 }
 
@@ -52,11 +52,14 @@ export function ExcelUploadDialog({ open, onOpenChange, type, onSuccess }: Excel
   const downloadTemplate = () => {
     const template = type === 'customers' 
       ? [{ 'Customer Name': 'John Doe', 'Email': 'john@example.com', 'Phone': '+254712345678', 'Area': 'Nairobi', 'Address': '123 Main St' }]
-      : [{ 'Customer Name': 'John Doe', 'Amount': 5000, 'Due Date': '2024-01-15', 'Payment Method': 'mpesa', 'M-Pesa Code': 'QHK8...' }];
+      : type === 'payments'
+      ? [{ 'Customer Name': 'John Doe', 'Amount': 5000, 'Due Date': '2024-01-15', 'Payment Method': 'mpesa', 'M-Pesa Code': 'QHK8...' }]
+      : [{ 'Customer Name': 'John Doe', 'Product Name': 'Water 20L', 'Quantity': 5, 'Unit Price': 210, 'Delivery Date': '2024-12-15', 'Driver Name': 'Peter Kamau', 'Delivery Note No': 'DN-001' }];
 
     const ws = XLSX.utils.json_to_sheet(template);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, type === 'customers' ? 'Customers' : 'Payments');
+    const sheetName = type === 'customers' ? 'Customers' : type === 'payments' ? 'Payments' : 'Deliveries';
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
     XLSX.writeFile(wb, `${type}_template.xlsx`);
   };
 
@@ -81,8 +84,10 @@ export function ExcelUploadDialog({ open, onOpenChange, type, onSuccess }: Excel
         try {
           if (type === 'customers') {
             await importCustomer(row);
-          } else {
+          } else if (type === 'payments') {
             await importPayment(row);
+          } else {
+            await importDelivery(row);
           }
           success++;
         } catch (error: any) {
@@ -168,6 +173,94 @@ export function ExcelUploadDialog({ open, onOpenChange, type, onSuccess }: Excel
     if (error) throw error;
   };
 
+  const importDelivery = async (row: any) => {
+    const customerName = row['Customer Name'] || row['customer_name'];
+    const productName = row['Product Name'] || row['product_name'];
+    const quantity = row['Quantity'] || row['quantity'];
+    const deliveryDate = row['Delivery Date'] || row['delivery_date'];
+
+    if (!customerName || !productName || !quantity || !deliveryDate) {
+      throw new Error('Customer Name, Product Name, Quantity, and Delivery Date are required');
+    }
+
+    // Find customer by name
+    const { data: customers, error: customerError } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('customer_name', customerName)
+      .limit(1);
+
+    if (customerError) throw customerError;
+    if (!customers || customers.length === 0) {
+      throw new Error(`Customer "${customerName}" not found`);
+    }
+
+    // Find product by name
+    const { data: products, error: productError } = await supabase
+      .from('products')
+      .select('id, unit_price')
+      .eq('name', productName)
+      .limit(1);
+
+    if (productError) throw productError;
+    if (!products || products.length === 0) {
+      throw new Error(`Product "${productName}" not found`);
+    }
+
+    // Find driver if provided
+    let driverId = null;
+    const driverName = row['Driver Name'] || row['driver_name'];
+    if (driverName) {
+      const { data: drivers } = await supabase
+        .from('drivers')
+        .select('id')
+        .eq('name', driverName)
+        .limit(1);
+      driverId = drivers?.[0]?.id || null;
+    }
+
+    // Calculate totals
+    const qty = Number(quantity);
+    const unitPrice = row['Unit Price'] || row['unit_price'];
+    const rate = unitPrice ? Number(unitPrice) : Number(products[0].unit_price);
+    const totalAmount = qty * rate;
+
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Insert delivery
+    const { data: delivery, error: deliveryError } = await supabase
+      .from('deliveries')
+      .insert({
+        customer_id: customers[0].id,
+        driver_id: driverId,
+        delivery_date: deliveryDate,
+        qty: qty,
+        unit_rate: rate,
+        total_amount: totalAmount,
+        delivery_note_no: row['Delivery Note No'] || row['delivery_note_no'] || null,
+        created_by_user: user.id,
+      })
+      .select()
+      .single();
+
+    if (deliveryError) throw deliveryError;
+
+    // Insert delivery item
+    const { error: itemError } = await supabase.from('delivery_items').insert({
+      delivery_id: delivery.id,
+      product_id: products[0].id,
+      product_name: productName,
+      quantity: qty,
+      unit_price: rate,
+      total_price: totalAmount,
+      customer_id: customers[0].id,
+    });
+
+    if (itemError) throw itemError;
+  };
+
   const handleClose = () => {
     setFile(null);
     setPreview([]);
@@ -180,7 +273,7 @@ export function ExcelUploadDialog({ open, onOpenChange, type, onSuccess }: Excel
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>Import {type === 'customers' ? 'Customers' : 'Payments'} from Excel</DialogTitle>
+          <DialogTitle>Import {type === 'customers' ? 'Customers' : type === 'payments' ? 'Payments' : 'Deliveries'} from Excel</DialogTitle>
           <DialogDescription>
             Upload an Excel file (.xlsx, .xls, .csv) to import multiple records at once
           </DialogDescription>

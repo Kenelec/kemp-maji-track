@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DeliveryFormDialog } from "../forms/DeliveryFormDialog";
+import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import { format } from "date-fns";
 import {
   AlertDialog,
@@ -23,6 +24,7 @@ export function DeliveriesSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
   const [editingDelivery, setEditingDelivery] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deliveryToDelete, setDeliveryToDelete] = useState<string | null>(null);
@@ -98,10 +100,16 @@ export function DeliveriesSection() {
           <h2 className="text-2xl font-bold text-foreground">Deliveries</h2>
           <p className="text-muted-foreground">Manage water deliveries</p>
         </div>
-        <Button className="bg-gradient-primary" onClick={() => setIsFormOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          New Delivery
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsExcelUploadOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <Button className="bg-gradient-primary" onClick={() => setIsFormOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Delivery
+          </Button>
+        </div>
       </div>
       
       <Card>
@@ -179,6 +187,13 @@ export function DeliveriesSection() {
           if (!open) setEditingDelivery(null);
         }}
         editData={editingDelivery}
+      />
+
+      <ExcelUploadDialog
+        open={isExcelUploadOpen}
+        onOpenChange={setIsExcelUploadOpen}
+        type="deliveries"
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["deliveries"] })}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
