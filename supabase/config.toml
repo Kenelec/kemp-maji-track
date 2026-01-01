@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.submit-delivery-query]
 verify_jwt = false
+
+[functions.send-confirmation-reminder]
+verify_jwt = true

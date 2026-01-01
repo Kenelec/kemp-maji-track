@@ -1,0 +1,316 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format, startOfWeek, endOfWeek, subWeeks, startOfMonth, startOfYear, isBefore, differenceInDays } from "date-fns";
+import { CheckCircle, AlertCircle, Clock, Truck, Package } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { CustomerDeliveryDiscrepancyDialog } from "./CustomerDeliveryDiscrepancyDialog";
+
+interface DeliveryWithItems {
+  id: string;
+  delivery_date: string;
+  total_amount: number;
+  qty: number;
+  delivery_status: string;
+  payment_status: string;
+  customer_confirmed: boolean;
+  confirmed_at: string | null;
+  confirmation_deadline: string | null;
+  auto_confirmed: boolean;
+  created_at: string;
+  driver_id: string | null;
+  drivers?: { name: string } | null;
+  delivery_items?: Array<{
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
+}
+
+const getDateRange = (period: string) => {
+  const now = new Date();
+  switch (period) {
+    case "this_week":
+      return { start: startOfWeek(now, { weekStartsOn: 1 }), end: now };
+    case "last_week":
+      const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      return { start: lastWeekStart, end: lastWeekEnd };
+    case "this_month":
+      return { start: startOfMonth(now), end: now };
+    case "this_year":
+      return { start: startOfYear(now), end: now };
+    case "all":
+    default:
+      return null;
+  }
+};
+
+export function CustomerDeliveriesSection() {
+  const [period, setPeriod] = useState("this_week");
+  const [discrepancyDelivery, setDiscrepancyDelivery] = useState<DeliveryWithItems | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: deliveries, isLoading } = useQuery({
+    queryKey: ["customer-deliveries", period],
+    queryFn: async () => {
+      const dateRange = getDateRange(period);
+      
+      let query = supabase
+        .from("deliveries")
+        .select(`
+          *,
+          drivers (name)
+        `)
+        .order("delivery_date", { ascending: false });
+
+      if (dateRange) {
+        query = query
+          .gte("delivery_date", dateRange.start.toISOString())
+          .lte("delivery_date", dateRange.end.toISOString());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Fetch delivery items for each delivery
+      const deliveriesWithItems = await Promise.all(
+        (data || []).map(async (delivery) => {
+          const { data: items } = await supabase
+            .from("delivery_items")
+            .select("product_name, quantity, unit_price, total_price")
+            .eq("delivery_id", delivery.id);
+          return { ...delivery, delivery_items: items || [] } as DeliveryWithItems;
+        })
+      );
+
+      return deliveriesWithItems;
+    },
+  });
+
+  const confirmDeliveryMutation = useMutation({
+    mutationFn: async (deliveryId: string) => {
+      const { error } = await supabase
+        .from("deliveries")
+        .update({
+          customer_confirmed: true,
+          confirmed_at: new Date().toISOString(),
+        })
+        .eq("id", deliveryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Delivery Confirmed",
+        description: "Thank you for confirming your delivery.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["customer-deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["last-delivery"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to confirm delivery. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const canConfirmDelivery = (delivery: DeliveryWithItems) => {
+    if (delivery.customer_confirmed || delivery.auto_confirmed) return false;
+    if (!delivery.confirmation_deadline) return true; // Allow if no deadline set
+    return isBefore(new Date(), new Date(delivery.confirmation_deadline));
+  };
+
+  const getConfirmationStatus = (delivery: DeliveryWithItems) => {
+    if (delivery.customer_confirmed) {
+      return { status: "confirmed", label: "Confirmed", icon: CheckCircle, color: "text-green-600" };
+    }
+    if (delivery.auto_confirmed) {
+      return { status: "auto", label: "Auto-confirmed", icon: Clock, color: "text-muted-foreground" };
+    }
+    if (delivery.confirmation_deadline) {
+      const daysLeft = differenceInDays(new Date(delivery.confirmation_deadline), new Date());
+      if (daysLeft < 0) {
+        return { status: "expired", label: "Expired", icon: AlertCircle, color: "text-destructive" };
+      }
+      return { status: "pending", label: `${daysLeft + 1}d left`, icon: Clock, color: "text-yellow-600" };
+    }
+    return { status: "pending", label: "Pending", icon: Clock, color: "text-yellow-600" };
+  };
+
+  const totalDeliveries = deliveries?.length || 0;
+  const totalAmount = deliveries?.reduce((sum, d) => sum + Number(d.total_amount || 0), 0) || 0;
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center py-8 text-muted-foreground">Loading deliveries...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Card */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Truck className="w-4 h-4" />
+              Deliveries
+            </div>
+            <div className="text-2xl font-bold">{totalDeliveries}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {period === "all" ? "All time" : period.replace("_", " ")}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Package className="w-4 h-4" />
+              Total Value
+            </div>
+            <div className="text-2xl font-bold">KSh {totalAmount.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {period === "all" ? "All time" : period.replace("_", " ")}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Deliveries Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle>My Deliveries</CardTitle>
+              <CardDescription>View and confirm your deliveries</CardDescription>
+            </div>
+            <Select value={period} onValueChange={setPeriod}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="this_week">This Week</SelectItem>
+                <SelectItem value="last_week">Last Week</SelectItem>
+                <SelectItem value="this_month">This Month</SelectItem>
+                <SelectItem value="this_year">This Year</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {deliveries && deliveries.length > 0 ? (
+            <div className="border rounded-lg overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Products</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Driver</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deliveries.map((delivery) => {
+                    const confirmStatus = getConfirmationStatus(delivery);
+                    const ConfirmIcon = confirmStatus.icon;
+                    
+                    return (
+                      <TableRow key={delivery.id}>
+                        <TableCell>
+                          {format(new Date(delivery.delivery_date), "MMM d, yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
+                              delivery.delivery_items.map((item, idx) => (
+                                <div key={idx} className="text-sm">
+                                  {item.product_name} x {item.quantity}
+                                </div>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground text-sm">
+                                {delivery.qty} units
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          KSh {Number(delivery.total_amount).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          {delivery.drivers?.name || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <ConfirmIcon className={`w-4 h-4 ${confirmStatus.color}`} />
+                            <span className={`text-sm ${confirmStatus.color}`}>
+                              {confirmStatus.label}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {canConfirmDelivery(delivery) && (
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 border-green-600 hover:bg-green-50"
+                                onClick={() => confirmDeliveryMutation.mutate(delivery.id)}
+                                disabled={confirmDeliveryMutation.isPending}
+                              >
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Confirm
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive border-destructive hover:bg-red-50"
+                                onClick={() => setDiscrepancyDelivery(delivery)}
+                              >
+                                <AlertCircle className="w-3 h-3 mr-1" />
+                                Issue
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No deliveries found for the selected period.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Discrepancy Dialog */}
+      <CustomerDeliveryDiscrepancyDialog
+        delivery={discrepancyDelivery}
+        onClose={() => setDiscrepancyDelivery(null)}
+        onSuccess={() => {
+          setDiscrepancyDelivery(null);
+          queryClient.invalidateQueries({ queryKey: ["customer-deliveries"] });
+        }}
+      />
+    </div>
+  );
+}
