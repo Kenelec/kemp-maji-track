@@ -78,12 +78,26 @@ export function CustomerFormDialog({ open, onOpenChange, editData }: CustomerFor
 
   const mutation = useMutation({
     mutationFn: async (data: CustomerFormData) => {
+      // Try to find an existing auth user with this email to auto-link
+      let userId: string | null = null;
+      if (data.email && !editData) {
+        // Look up user by email in auth.users (via users table which mirrors auth)
+        const { data: authUser } = await supabase
+          .from("users")
+          .select("id")
+          .ilike("name", data.email)
+          .maybeSingle();
+        
+        userId = authUser?.id || null;
+      }
+
       const payload = {
         customer_name: data.customer_name,
         email: data.email || null,
         phone: data.phone || null,
-        area: data.area || null, // This matches your database column
+        area: data.area || null,
         address: data.address || null,
+        ...(userId && !editData ? { user_id: userId } : {}),
       };
 
       if (editData) {
