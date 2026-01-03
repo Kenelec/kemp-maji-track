@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format } from "date-fns";
 import { CreditCard, AlertCircle, CheckCircle } from "lucide-react";
@@ -23,7 +23,7 @@ interface PendingDelivery {
 }
 
 export function CustomerMpesaPaymentForm() {
-  const [selectedDeliveryId, setSelectedDeliveryId] = useState<string>("");
+  const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<string[]>([]);
   const [mpesaCode, setMpesaCode] = useState("");
   const [validationError, setValidationError] = useState("");
   const queryClient = useQueryClient();
@@ -94,9 +94,22 @@ export function CustomerMpesaPaymentForm() {
     return !!data;
   };
 
+  // Calculate total for selected deliveries
+  const selectedTotal = pendingDeliveries
+    ?.filter(d => selectedDeliveryIds.includes(d.id))
+    .reduce((sum, d) => sum + Number(d.total_amount), 0) || 0;
+
+  const toggleDeliverySelection = (deliveryId: string) => {
+    setSelectedDeliveryIds(prev =>
+      prev.includes(deliveryId)
+        ? prev.filter(id => id !== deliveryId)
+        : [...prev, deliveryId]
+    );
+  };
+
   const submitPaymentMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedDeliveryId) throw new Error("Please select a delivery to pay for");
+      if (selectedDeliveryIds.length === 0) throw new Error("Please select at least one delivery to pay for");
       if (!mpesaCode.trim()) throw new Error("Please enter your M-Pesa code");
       
       const code = mpesaCode.trim().toUpperCase();
@@ -112,43 +125,45 @@ export function CustomerMpesaPaymentForm() {
         throw new Error("This M-Pesa code has already been used. Please check and enter the correct code.");
       }
 
-      // Get selected delivery
-      const selectedDelivery = pendingDeliveries?.find(d => d.id === selectedDeliveryId);
-      if (!selectedDelivery || !customer) throw new Error("Invalid selection");
+      // Get selected deliveries
+      const selectedDeliveries = pendingDeliveries?.filter(d => selectedDeliveryIds.includes(d.id));
+      if (!selectedDeliveries?.length || !customer) throw new Error("Invalid selection");
 
-      // Create payment record
-      const { error: paymentError } = await supabase
-        .from("payments")
-        .insert({
-          customer_id: customer.id,
-          delivery_id: selectedDeliveryId,
-          amount: selectedDelivery.total_amount,
-          due_date: new Date().toISOString().split("T")[0],
-          status: "pending", // Will be verified by admin
-          payment_method: "mpesa",
-          mpesa_code: code,
-        });
+      // Create payment records for each selected delivery
+      for (const delivery of selectedDeliveries) {
+        const { error: paymentError } = await supabase
+          .from("payments")
+          .insert({
+            customer_id: customer.id,
+            delivery_id: delivery.id,
+            amount: delivery.total_amount,
+            due_date: new Date().toISOString().split("T")[0],
+            status: "pending", // Will be verified by admin
+            payment_method: "mpesa",
+            mpesa_code: code,
+          });
 
-      if (paymentError) throw paymentError;
+        if (paymentError) throw paymentError;
 
-      // Update delivery payment status
-      const { error: deliveryError } = await supabase
-        .from("deliveries")
-        .update({
-          payment_status: "pending",
-          mpesa_transaction_id: code,
-        })
-        .eq("id", selectedDeliveryId);
+        // Update delivery payment status
+        const { error: deliveryError } = await supabase
+          .from("deliveries")
+          .update({
+            payment_status: "pending",
+            mpesa_transaction_id: code,
+          })
+          .eq("id", delivery.id);
 
-      if (deliveryError) throw deliveryError;
+        if (deliveryError) throw deliveryError;
+      }
     },
     onSuccess: () => {
       toast({
         title: "Payment Submitted",
-        description: "Your M-Pesa payment has been submitted for verification.",
+        description: `Payment for ${selectedDeliveryIds.length} ${selectedDeliveryIds.length === 1 ? 'delivery' : 'deliveries'} submitted for verification.`,
       });
       setMpesaCode("");
-      setSelectedDeliveryId("");
+      setSelectedDeliveryIds([]);
       setValidationError("");
       queryClient.invalidateQueries({ queryKey: ["pending-deliveries-for-payment"] });
       queryClient.invalidateQueries({ queryKey: ["customer-payments"] });
@@ -201,23 +216,23 @@ export function CustomerMpesaPaymentForm() {
         {pendingDeliveries && pendingDeliveries.length > 0 ? (
           <>
             <div className="space-y-3">
-              <Label>Select Delivery to Pay *</Label>
-              <RadioGroup
-                value={selectedDeliveryId}
-                onValueChange={setSelectedDeliveryId}
-                className="space-y-2"
-              >
+              <Label>Select Deliveries to Pay * (You can select multiple)</Label>
+              <div className="space-y-2">
                 {pendingDeliveries.map((delivery) => (
                   <div
                     key={delivery.id}
                     className={`flex items-center space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                      selectedDeliveryId === delivery.id
+                      selectedDeliveryIds.includes(delivery.id)
                         ? "border-primary bg-primary/5"
                         : "hover:bg-muted/50"
                     }`}
-                    onClick={() => setSelectedDeliveryId(delivery.id)}
+                    onClick={() => toggleDeliverySelection(delivery.id)}
                   >
-                    <RadioGroupItem value={delivery.id} id={delivery.id} />
+                    <Checkbox
+                      checked={selectedDeliveryIds.includes(delivery.id)}
+                      onCheckedChange={() => toggleDeliverySelection(delivery.id)}
+                      id={delivery.id}
+                    />
                     <label htmlFor={delivery.id} className="flex-1 cursor-pointer">
                       <div className="flex justify-between items-start">
                         <div>
@@ -240,8 +255,18 @@ export function CustomerMpesaPaymentForm() {
                     </label>
                   </div>
                 ))}
-              </RadioGroup>
+              </div>
             </div>
+
+            {/* Selected Total */}
+            {selectedDeliveryIds.length > 0 && (
+              <div className="p-3 bg-primary/10 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Selected: {selectedDeliveryIds.length} {selectedDeliveryIds.length === 1 ? 'delivery' : 'deliveries'}</span>
+                  <span className="text-lg font-bold text-primary">Total: KSh {selectedTotal.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
 
             {/* M-Pesa Code Input */}
             <div className="space-y-2">
@@ -273,7 +298,7 @@ export function CustomerMpesaPaymentForm() {
               onClick={() => submitPaymentMutation.mutate()}
               disabled={
                 submitPaymentMutation.isPending ||
-                !selectedDeliveryId ||
+                selectedDeliveryIds.length === 0 ||
                 !mpesaCode.trim() ||
                 !!validationError
               }
@@ -283,7 +308,7 @@ export function CustomerMpesaPaymentForm() {
               ) : (
                 <>
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Submit Payment
+                  Submit Payment {selectedDeliveryIds.length > 1 ? `for ${selectedDeliveryIds.length} Deliveries` : ''}
                 </>
               )}
             </Button>

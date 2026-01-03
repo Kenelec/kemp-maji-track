@@ -177,6 +177,8 @@ Deno.serve(async (req) => {
     // Send Email if email available
     if (customer.email) {
       try {
+        console.log('Attempting to send email to:', customer.email);
+        
         const emailResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -184,6 +186,9 @@ Deno.serve(async (req) => {
             'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`
           },
           body: JSON.stringify({
+            // NOTE: 'onboarding@resend.dev' only sends to the Resend account owner's email
+            // For production, verify your domain at https://resend.com/domains
+            // Then change to: 'Kemp Water <noreply@yourdomain.com>'
             from: 'Kemp Water <onboarding@resend.dev>',
             to: [customer.email],
             subject: `Delivery Confirmation - ${deliveryDate}`,
@@ -193,19 +198,42 @@ Deno.serve(async (req) => {
 
         const emailData = await emailResponse.json();
         results.email = emailData;
-        console.log('Email sent:', results.email);
+        
+        const emailSuccess = emailResponse.ok && !emailData.error;
+        console.log('Email API response:', JSON.stringify(emailData));
+        console.log('Email status:', emailSuccess ? 'success' : 'failed');
+        
+        // Log with detailed error info if failed
+        const emailLogContent = emailSuccess 
+          ? emailHtml 
+          : `FAILED: ${JSON.stringify(emailData)} - ${emailHtml.substring(0, 200)}`;
 
         // Log Email notification
         await supabase.from('notifications_log').insert({
           user_id: customer.user_id,
           channel: 'email',
-          content: emailHtml,
-          status: emailResponse.ok ? 'delivered' : 'failed',
-          provider_ref: emailData.id
+          content: emailLogContent,
+          status: emailSuccess ? 'delivered' : 'failed',
+          provider_ref: emailData.id || emailData.error?.message || 'no_ref'
         });
+        
+        if (!emailSuccess) {
+          console.error('Email failed. Resend error:', emailData.error || emailData);
+          console.log('TIP: onboarding@resend.dev only works for the account owner email.');
+          console.log('To send to other emails, verify a domain at https://resend.com/domains');
+        }
       } catch (error) {
         console.error('Email error:', error);
         results.email = { error: error instanceof Error ? error.message : 'Unknown error' };
+        
+        // Log failed attempt
+        await supabase.from('notifications_log').insert({
+          user_id: customer.user_id,
+          channel: 'email',
+          content: `EXCEPTION: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          status: 'failed',
+          provider_ref: null
+        });
       }
     }
 
