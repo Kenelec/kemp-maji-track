@@ -22,6 +22,7 @@ interface DeliveryWithItems {
   confirmed_at: string | null;
   confirmation_deadline: string | null;
   auto_confirmed: boolean;
+  discrepancy_flag: boolean | null;
   created_at: string;
   driver_id: string | null;
   drivers?: { name: string } | null;
@@ -31,6 +32,7 @@ interface DeliveryWithItems {
     unit_price: number;
     total_price: number;
   }>;
+  hasOpenQuery?: boolean;
 }
 
 const getDateRange = (period: string) => {
@@ -79,14 +81,26 @@ export function CustomerDeliveriesSection() {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Fetch delivery items for each delivery
+      // Fetch delivery items and check for open queries for each delivery
       const deliveriesWithItems = await Promise.all(
         (data || []).map(async (delivery) => {
           const { data: items } = await supabase
             .from("delivery_items")
             .select("product_name, quantity, unit_price, total_price")
             .eq("delivery_id", delivery.id);
-          return { ...delivery, delivery_items: items || [] } as DeliveryWithItems;
+          
+          // Check if there's an open query for this delivery
+          const { data: queries } = await supabase
+            .from("delivery_queries")
+            .select("id")
+            .eq("delivery_id", delivery.id)
+            .limit(1);
+          
+          return { 
+            ...delivery, 
+            delivery_items: items || [],
+            hasOpenQuery: (queries?.length || 0) > 0
+          } as DeliveryWithItems;
         })
       );
 
@@ -123,7 +137,9 @@ export function CustomerDeliveriesSection() {
   });
 
   const canConfirmDelivery = (delivery: DeliveryWithItems) => {
+    // Hide buttons if already confirmed, auto-confirmed, has discrepancy flag, or has an open query
     if (delivery.customer_confirmed || delivery.auto_confirmed) return false;
+    if (delivery.discrepancy_flag || delivery.hasOpenQuery) return false;
     if (!delivery.confirmation_deadline) return true; // Allow if no deadline set
     return isBefore(new Date(), new Date(delivery.confirmation_deadline));
   };

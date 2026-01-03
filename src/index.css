@@ -224,11 +224,14 @@
   }
   
   .payment-history-print,
-  .payment-history-print * {
+  .payment-history-print *,
+  .statement-print-area,
+  .statement-print-area * {
     visibility: visible;
   }
   
-  .payment-history-print {
+  .payment-history-print,
+  .statement-print-area {
     position: absolute;
     left: 0;
     top: 0;
@@ -249,18 +252,37 @@
   }
   
   /* Ensure table fits on page */
-  .payment-history-print table {
+  .payment-history-print table,
+  .statement-print-area table {
     font-size: 12px;
     width: 100%;
   }
   
   /* Cards in a row for print */
-  .payment-history-print .grid {
+  .payment-history-print .grid,
+  .statement-print-area .grid {
     display: flex;
     gap: 16px;
   }
   
-  .payment-history-print .grid > * {
+  .payment-history-print .grid > *,
+  .statement-print-area .grid > * {
     flex: 1;
+  }
+
+  /* Statement specific print styles */
+  .statement-print-area {
+    background: white !important;
+    color: black !important;
+  }
+
+  .statement-print-area .bg-muted {
+    background-color: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .statement-print-area .border {
+    border-color: #d1d5db !important;
   }
 }

@@ -254,6 +254,17 @@ export function CustomerStatementsSection() {
           <CardDescription>Select a month to view and download your statement</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Print Header - only visible when printing */}
+          <div className="hidden print:block mb-6">
+            <h1 className="text-2xl font-bold">KEMP MAJI TRACK</h1>
+            <p className="text-lg">Monthly Statement - {monthOptions.find(o => o.value === selectedMonth)?.label}</p>
+            <div className="mt-2 text-sm">
+              <p><strong>Customer:</strong> {customerProfile.customer_name}</p>
+              <p><strong>Phone:</strong> {customerProfile.phone || "N/A"}</p>
+              <p><strong>Area:</strong> {customerProfile.area || "N/A"}</p>
+            </div>
+          </div>
+
           {/* Month Selector */}
           <div className="flex flex-wrap items-center gap-4 print:hidden">
             <div className="w-full sm:w-[200px]">
