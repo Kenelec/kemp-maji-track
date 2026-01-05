@@ -263,7 +263,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Users },
     { id: "tracking", label: `Driver Tracking (${driverLocations.length})`, icon: Navigation },
-    { id: "approvals", label: `Approvals (${approvalRequests.filter(r => r.status === 'pending').length + deliveryQueries.filter(q => q.status === 'open').length})`, icon: AlertTriangle },
+    { id: "approvals", label: `Approvals (${approvalRequests.filter(r => r.status === 'pending').length + deliveryQueries.filter(q => q.status === 'pending' || q.status === 'open').length})`, icon: AlertTriangle },
     { id: "deliveries", label: "Deliveries", icon: Truck },
     { id: "payments", label: "Payments", icon: CreditCard },
     { id: "customers", label: "Customers", icon: Users },
@@ -424,7 +424,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {deliveryQueries.filter(q => q.status === 'open').map((query) => (
+                        {deliveryQueries.filter(q => q.status === 'pending' || q.status === 'open').map((query) => (
                           <Card key={query.id} className="p-4">
                             <div className="flex items-start justify-between">
                               <div className="flex items-center space-x-3">
@@ -442,9 +442,9 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                                 </div>
                               </div>
                               <div className="flex items-center space-x-2">
-                                {query.status === 'open' ? (
+                              {query.status === 'pending' || query.status === 'open' ? (
                                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                                    <Clock className="w-3 h-3 mr-1" /> Open
+                                    <Clock className="w-3 h-3 mr-1" /> Pending
                                   </Badge>
                                 ) : query.status === 'resolved' ? (
                                   <Badge variant="secondary" className="bg-green-100 text-green-800">
