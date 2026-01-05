@@ -59,7 +59,7 @@ export function CustomerDeliveriesSection() {
   const [discrepancyDelivery, setDiscrepancyDelivery] = useState<DeliveryWithItems | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: deliveries, isLoading } = useQuery({
+  const { data: deliveries, isLoading, refetch } = useQuery({
     queryKey: ["customer-deliveries", period],
     queryFn: async () => {
       const dateRange = getDateRange(period);
@@ -106,6 +106,8 @@ export function CustomerDeliveriesSection() {
 
       return deliveriesWithItems;
     },
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   const confirmDeliveryMutation = useMutation({
