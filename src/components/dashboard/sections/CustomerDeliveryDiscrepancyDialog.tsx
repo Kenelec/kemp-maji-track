@@ -90,22 +90,30 @@ export function CustomerDeliveryDiscrepancyDialog({
 
       if (error) throw error;
 
-      // Mark delivery as having a discrepancy
-      await supabase
+      // Mark delivery as having a discrepancy - with error handling
+      const { error: updateError } = await supabase
         .from("deliveries")
         .update({
           discrepancy_flag: true,
           discrepancy_notes: `Customer reported: ${queryType} - ${message.trim()}`,
         })
         .eq("id", delivery.id);
+
+      if (updateError) {
+        console.error("Failed to update discrepancy_flag:", updateError);
+        // Still throw to trigger proper error handling
+        throw new Error("Query submitted but failed to flag delivery. Please contact support.");
+      }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Query Submitted",
         description: "Your concern has been submitted. Our team will review it shortly.",
       });
       setQueryType("");
       setMessage("");
+      // Small delay to ensure DB consistency before refreshing
+      await new Promise(resolve => setTimeout(resolve, 300));
       onSuccess();
     },
     onError: (error: Error) => {

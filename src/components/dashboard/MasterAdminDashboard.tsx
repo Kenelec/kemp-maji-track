@@ -160,7 +160,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
   useEffect(() => {
     fetchDashboardData();
     
-    // Set up real-time updates for driver locations
+    // Set up real-time updates for driver locations and delivery queries
     const channel = supabase
       .channel('master-admin-dashboard-updates')
       .on(
@@ -170,8 +170,20 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           schema: 'public',
           table: 'driver_locations',
         },
-        (payload) => {
-          fetchDashboardData(); // Refresh when new location comes in
+        () => {
+          fetchDashboardData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'delivery_queries',
+        },
+        () => {
+          console.log('Delivery query change detected, refreshing...');
+          fetchDashboardData();
         }
       )
       .subscribe();

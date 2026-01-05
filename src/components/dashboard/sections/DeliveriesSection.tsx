@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DeliveryFormDialog } from "../forms/DeliveryFormDialog";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
@@ -42,7 +43,8 @@ export function DeliveriesSection() {
             product_id,
             product_name,
             quantity
-          )
+          ),
+          delivery_queries (id, status)
         `)
         .order("delivery_date", { ascending: false });
       
@@ -50,6 +52,21 @@ export function DeliveriesSection() {
       return data;
     },
   });
+
+  const getConfirmationStatus = (delivery: any) => {
+    const hasQuery = delivery.delivery_queries && delivery.delivery_queries.length > 0;
+    
+    if (delivery.discrepancy_flag || hasQuery) {
+      return { label: "Issue", color: "bg-red-100 text-red-800", icon: AlertCircle };
+    }
+    if (delivery.customer_confirmed) {
+      return { label: "Confirmed", color: "bg-green-100 text-green-800", icon: CheckCircle };
+    }
+    if (delivery.auto_confirmed) {
+      return { label: "Auto-Confirmed", color: "bg-gray-100 text-gray-800", icon: CheckCircle };
+    }
+    return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock };
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -136,44 +153,55 @@ export function DeliveriesSection() {
                   <TableHead>Quantity</TableHead>
                   <TableHead>Unit Rate</TableHead>
                   <TableHead>Total Amount</TableHead>
+                  <TableHead>Confirmation</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {deliveries.map((delivery) => (
-                  <TableRow key={delivery.id}>
-                    <TableCell className="font-medium">
-                      {delivery.customers?.customer_name || "Unknown"}
-                    </TableCell>
-                    <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
-                    <TableCell>
-                      {(delivery as any).drivers?.name || "—"}
-                    </TableCell>
-                    <TableCell>{delivery.delivery_note_no || "—"}</TableCell>
-                    <TableCell>
-                      {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
-                        delivery.delivery_items.map((item: any, idx: number) => (
-                          <div key={idx}>{item.product_name}</div>
-                        ))
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell>{delivery.qty}</TableCell>
-                    <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
-                    <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(delivery.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {deliveries.map((delivery) => {
+                  const confirmStatus = getConfirmationStatus(delivery);
+                  const StatusIcon = confirmStatus.icon;
+                  return (
+                    <TableRow key={delivery.id}>
+                      <TableCell className="font-medium">
+                        {delivery.customers?.customer_name || "Unknown"}
+                      </TableCell>
+                      <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
+                      <TableCell>
+                        {(delivery as any).drivers?.name || "—"}
+                      </TableCell>
+                      <TableCell>{delivery.delivery_note_no || "—"}</TableCell>
+                      <TableCell>
+                        {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
+                          delivery.delivery_items.map((item: any, idx: number) => (
+                            <div key={idx}>{item.product_name}</div>
+                          ))
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell>{delivery.qty}</TableCell>
+                      <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
+                      <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge className={confirmStatus.color}>
+                          <StatusIcon className="w-3 h-3 mr-1" />
+                          {confirmStatus.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(delivery.id)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

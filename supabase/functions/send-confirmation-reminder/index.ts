@@ -90,8 +90,11 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const now = new Date();
+    
+    // Calculate reminder time (24 hours after delivery for 48-hour total window)
+    const reminderCheckTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
 
-    // 1. Find deliveries needing reminder (past deadline, not reminded, not confirmed)
+    // 1. Find deliveries needing reminder (24 hours after creation, not reminded, not confirmed)
     const { data: needsReminder, error: reminderError } = await supabase
       .from("deliveries")
       .select(`
@@ -100,6 +103,7 @@ serve(async (req) => {
         total_amount,
         confirmation_deadline,
         confirmation_reminder_sent,
+        created_at,
         customers (
           id,
           customer_name,
@@ -111,8 +115,8 @@ serve(async (req) => {
       .eq("customer_confirmed", false)
       .eq("auto_confirmed", false)
       .eq("confirmation_reminder_sent", false)
-      .lt("confirmation_deadline", now.toISOString())
-      .not("confirmation_deadline", "is", null);
+      .eq("discrepancy_flag", false)
+      .lt("created_at", reminderCheckTime.toISOString());
 
     if (reminderError) {
       console.error("Error fetching deliveries for reminder:", reminderError);
@@ -167,16 +171,16 @@ serve(async (req) => {
       }
     }
 
-    // 2. Auto-confirm deliveries 24 hours past reminder
-    const autoConfirmDeadline = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+    // 2. Auto-confirm deliveries 48 hours after creation (24 hours after reminder)
+    const autoConfirmTime = new Date(now.getTime() - 48 * 60 * 60 * 1000); // 48 hours ago
 
     const { data: needsAutoConfirm, error: autoConfirmError } = await supabase
       .from("deliveries")
-      .select("id, confirmation_deadline")
+      .select("id, created_at")
       .eq("customer_confirmed", false)
       .eq("auto_confirmed", false)
-      .eq("confirmation_reminder_sent", true)
-      .lt("confirmation_deadline", autoConfirmDeadline.toISOString());
+      .eq("discrepancy_flag", false)
+      .lt("created_at", autoConfirmTime.toISOString());
 
     if (autoConfirmError) {
       console.error("Error fetching deliveries for auto-confirm:", autoConfirmError);
