@@ -1,9 +1,15 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { z } from 'https://esm.sh/zod@3.22.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schema
+const requestSchema = z.object({
+  payment_link_token: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid token format'),
+});
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -12,14 +18,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { payment_link_token } = await req.json();
-
-    if (!payment_link_token) {
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = requestSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      console.error('Validation failed:', validationResult.error.format());
       return new Response(
-        JSON.stringify({ error: 'Payment link token is required' }),
+        JSON.stringify({ error: 'Invalid request parameters' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { payment_link_token } = validationResult.data;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -99,10 +110,7 @@ Deno.serve(async (req) => {
     if (!checkoutResponse.ok) {
       console.error('Africa\'s Talking error:', checkoutData);
       return new Response(
-        JSON.stringify({ 
-          error: 'Failed to initiate M-Pesa payment',
-          details: checkoutData 
-        }),
+        JSON.stringify({ error: 'Failed to initiate payment. Please try again.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -121,7 +129,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in initiate-mpesa-payment:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'An error occurred processing your request' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

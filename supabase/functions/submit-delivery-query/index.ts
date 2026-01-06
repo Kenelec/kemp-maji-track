@@ -1,9 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { z } from 'https://esm.sh/zod@3.22.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schema
+const requestSchema = z.object({
+  payment_link_token: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid token format'),
+  query_type: z.enum(['missing_items', 'wrong_quantity', 'wrong_price', 'not_received', 'other']),
+  message: z.string().min(1, 'Message is required').max(1000, 'Message too long'),
+});
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,14 +19,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { payment_link_token, query_type, message } = await req.json();
-
-    if (!payment_link_token || !query_type || !message) {
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = requestSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      console.error('Validation failed:', validationResult.error.format());
       return new Response(
-        JSON.stringify({ error: 'payment_link_token, query_type, and message are required' }),
+        JSON.stringify({ error: 'Invalid request parameters' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { payment_link_token, query_type, message } = validationResult.data;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -55,7 +68,7 @@ Deno.serve(async (req) => {
     if (queryError) {
       console.error('Error creating query:', queryError);
       return new Response(
-        JSON.stringify({ error: 'Failed to submit query' }),
+        JSON.stringify({ error: 'Failed to submit query. Please try again.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -74,7 +87,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in submit-delivery-query:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'An error occurred processing your request' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

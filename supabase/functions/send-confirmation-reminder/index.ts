@@ -135,7 +135,10 @@ serve(async (req) => {
 
     if (reminderError) {
       console.error("Error fetching deliveries for reminder:", reminderError);
-      throw reminderError;
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch deliveries" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log(`Found ${needsReminder?.length || 0} deliveries needing reminder`);
@@ -199,7 +202,10 @@ serve(async (req) => {
 
     if (autoConfirmError) {
       console.error("Error fetching deliveries for auto-confirm:", autoConfirmError);
-      throw autoConfirmError;
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch deliveries for auto-confirm" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log(`Found ${needsAutoConfirm?.length || 0} deliveries to auto-confirm`);
@@ -230,10 +236,9 @@ serve(async (req) => {
       }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("Error in send-confirmation-reminder:", error);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "An error occurred processing your request" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
