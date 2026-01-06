@@ -1,20 +1,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { z } from 'https://esm.sh/zod@3.22.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface AfricasTalkingCallback {
-  status: 'Success' | 'Failed';
-  phoneNumber: string;
-  amount: string;
-  transactionId: string;
-  requestMetadata: {
-    delivery_id: string;
-    payment_link_token: string;
-  };
-}
+// Input validation schema for Africa's Talking callback
+const callbackSchema = z.object({
+  status: z.enum(['Success', 'Failed']),
+  phoneNumber: z.string().optional(),
+  amount: z.string().optional(),
+  transactionId: z.string().optional(),
+  requestMetadata: z.object({
+    delivery_id: z.string().uuid('Invalid delivery ID format'),
+    payment_link_token: z.string().optional(),
+  }),
+});
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -28,21 +30,25 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const callback: AfricasTalkingCallback = await req.json();
+    // Parse and validate callback
+    const rawBody = await req.json();
+    const validationResult = callbackSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      console.error('Callback validation failed:', validationResult.error.format());
+      return new Response(
+        JSON.stringify({ error: 'Invalid callback data' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const callback = validationResult.data;
     
     console.log('Received M-Pesa callback:', {
       status: callback.status,
       transactionId: callback.transactionId,
-      deliveryId: callback.requestMetadata?.delivery_id
+      deliveryId: callback.requestMetadata.delivery_id
     });
-
-    if (!callback.requestMetadata?.delivery_id) {
-      console.error('Missing delivery_id in callback metadata');
-      return new Response(
-        JSON.stringify({ error: 'Missing delivery_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     const deliveryId = callback.requestMetadata.delivery_id;
 
@@ -56,7 +62,10 @@ Deno.serve(async (req) => {
 
       if (fetchError) {
         console.error('Error fetching delivery:', fetchError);
-        throw fetchError;
+        return new Response(
+          JSON.stringify({ error: 'Failed to process callback' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       const customer = Array.isArray(delivery.customers) ? delivery.customers[0] : delivery.customers;
@@ -73,7 +82,10 @@ Deno.serve(async (req) => {
 
       if (updateError) {
         console.error('Error updating delivery:', updateError);
-        throw updateError;
+        return new Response(
+          JSON.stringify({ error: 'Failed to process callback' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       console.log(`Delivery ${deliveryId} marked as paid with transaction ${callback.transactionId}`);
@@ -139,7 +151,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in mpesa-webhook:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'An error occurred processing callback' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

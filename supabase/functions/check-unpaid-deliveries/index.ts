@@ -41,6 +41,10 @@ Deno.serve(async (req) => {
       .eq('setting_key', 'payment_reminder_hours')
       .single();
 
+    if (settingsError) {
+      console.error('Error fetching settings:', settingsError);
+    }
+
     const reminderHours = settings?.setting_value?.hours || 48; // Default to 48 if not set
     console.log(`Using reminder duration: ${reminderHours} hours`);
 
@@ -62,7 +66,10 @@ Deno.serve(async (req) => {
 
     if (fetchError) {
       console.error('Error fetching unpaid deliveries:', fetchError);
-      throw fetchError;
+      return new Response(
+        JSON.stringify({ error: 'Failed to check deliveries' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log(`Found ${unpaidDeliveries?.length || 0} unpaid deliveries`);
@@ -110,7 +117,7 @@ Deno.serve(async (req) => {
         results.push({
           delivery_id: delivery.id,
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: 'Failed to send reminder'
         });
       }
     }
@@ -132,7 +139,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in check-unpaid-deliveries:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'An error occurred processing your request' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

@@ -1,9 +1,15 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { z } from 'https://esm.sh/zod@3.22.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Input validation schema - UUID format for delivery_id
+const requestSchema = z.object({
+  delivery_id: z.string().uuid('Invalid delivery ID format'),
+});
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,14 +17,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { delivery_id } = await req.json();
-
-    if (!delivery_id) {
+    // Parse and validate input
+    const rawBody = await req.json();
+    const validationResult = requestSchema.safeParse(rawBody);
+    
+    if (!validationResult.success) {
+      console.error('Validation failed:', validationResult.error.format());
       return new Response(
-        JSON.stringify({ error: 'delivery_id is required' }),
+        JSON.stringify({ error: 'Invalid request parameters' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const { delivery_id } = validationResult.data;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -131,7 +142,7 @@ Deno.serve(async (req) => {
         if (whatsappData.SMSMessageData?.Recipients?.[0]?.status === 'Success') {
           notificationSuccess = true;
           notificationRef = whatsappData.SMSMessageData?.Recipients?.[0]?.messageId;
-          results.sms = whatsappData;
+          results.sms = { success: true, channel: 'whatsapp' };
           console.log('WhatsApp delivery confirmation sent successfully');
         } else {
           // Fallback to SMS
@@ -157,7 +168,7 @@ Deno.serve(async (req) => {
 
           notificationSuccess = smsData.SMSMessageData?.Recipients?.[0]?.status === 'Success';
           notificationRef = smsData.SMSMessageData?.Recipients?.[0]?.messageId;
-          results.sms = smsData;
+          results.sms = { success: notificationSuccess, channel: 'sms' };
         }
 
         // Log notification (WhatsApp or SMS)
@@ -170,7 +181,7 @@ Deno.serve(async (req) => {
         });
       } catch (error) {
         console.error('Notification error:', error);
-        results.sms = { error: error instanceof Error ? error.message : 'Unknown error' };
+        results.sms = { success: false, error: 'Failed to send notification' };
       }
     }
 
@@ -197,24 +208,19 @@ Deno.serve(async (req) => {
         });
 
         const emailData = await emailResponse.json();
-        results.email = emailData;
-        
         const emailSuccess = emailResponse.ok && !emailData.error;
         console.log('Email API response:', JSON.stringify(emailData));
         console.log('Email status:', emailSuccess ? 'success' : 'failed');
         
-        // Log with detailed error info if failed
-        const emailLogContent = emailSuccess 
-          ? emailHtml 
-          : `FAILED: ${JSON.stringify(emailData)} - ${emailHtml.substring(0, 200)}`;
+        results.email = { success: emailSuccess };
 
         // Log Email notification
         await supabase.from('notifications_log').insert({
           user_id: customer.user_id,
           channel: 'email',
-          content: emailLogContent,
+          content: emailHtml.substring(0, 500),
           status: emailSuccess ? 'delivered' : 'failed',
-          provider_ref: emailData.id || emailData.error?.message || 'no_ref'
+          provider_ref: emailData.id || null
         });
         
         if (!emailSuccess) {
@@ -224,13 +230,13 @@ Deno.serve(async (req) => {
         }
       } catch (error) {
         console.error('Email error:', error);
-        results.email = { error: error instanceof Error ? error.message : 'Unknown error' };
+        results.email = { success: false, error: 'Failed to send email' };
         
         // Log failed attempt
         await supabase.from('notifications_log').insert({
           user_id: customer.user_id,
           channel: 'email',
-          content: `EXCEPTION: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: 'Email send attempt failed',
           status: 'failed',
           provider_ref: null
         });
@@ -249,7 +255,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in send-delivery-confirmation:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'An error occurred processing your request' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
