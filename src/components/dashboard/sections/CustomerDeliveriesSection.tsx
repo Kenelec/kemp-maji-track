@@ -108,6 +108,7 @@ export function CustomerDeliveriesSection() {
     },
     refetchOnMount: 'always',
     staleTime: 0,
+    refetchInterval: 5000, // Refresh every 5 seconds to show buttons when MasterAdmin updates delivery
   });
 
   const confirmDeliveryMutation = useMutation({
