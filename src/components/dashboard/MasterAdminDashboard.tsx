@@ -34,21 +34,15 @@ import { NotificationCenter } from "./NotificationCenter";
 
 interface ApprovalRequest {
   id: string;
-  requested_by: string;
-  admin_notes: string | null;
-  status: string;
-  approved_by: string | null;
-  approved_at: string | null;
-  rejected_by: string | null;
-  rejected_at: string | null;
-  rejection_reason: string | null;
-  request_type: string;
+  admin_user_id: string;
+  status: string | null;
+  acted_by: string | null;
+  acted_at: string | null;
+  requested_action: string;
   target_id: string;
   target_table: string;
-  original_data: any;
-  requested_changes: any;
-  created_at: string;
-  updated_at: string;
+  payload: any;
+  requested_at: string | null;
 }
 
 interface DeliveryQuery {
@@ -114,7 +108,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       const { data: requestsData, error: requestsError } = await supabase
         .from('admin_approval_requests')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('requested_at', { ascending: false });
 
       if (requestsError) throw requestsError;
 
@@ -368,13 +362,13 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                           <Card key={request.id} className="p-4">
                             <div className="flex items-start justify-between">
                               <div className="flex items-center space-x-3">
-                                {getRequestIcon(request.request_type)}
+                                {getRequestIcon(request.requested_action)}
                                 <div>
                                   <h3 className="font-medium">
-                                    {request.request_type.replace('_', ' ')} Request
+                                    {request.requested_action.replace('_', ' ')} Request
                                   </h3>
                                   <p className="text-sm text-muted-foreground">
-                                    From: {request.requested_by}
+                                    From: Admin {request.admin_user_id?.slice(0, 8)}...
                                   </p>
                                   <p className="text-sm text-muted-foreground">
                                     Target: {request.target_table} - ID: {request.target_id}
@@ -382,12 +376,12 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                                 </div>
                               </div>
                               <div className="flex items-center space-x-2">
-                                {getStatusBadge(request.status)}
+                                {getStatusBadge(request.status || 'pending')}
                               </div>
                             </div>
-                            {request.admin_notes && (
+                            {request.payload && (
                               <div className="mt-2 p-2 bg-muted rounded text-sm">
-                                <strong>Notes:</strong> {request.admin_notes}
+                                <strong>Changes:</strong> {JSON.stringify(request.payload, null, 2)}
                               </div>
                             )}
                             {request.status === 'pending' && (
@@ -398,7 +392,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                                   onClick={() => approveRequest(request.id, 'admin_approval_requests', request.id, {
                                     target_table: request.target_table,
                                     target_id: request.target_id,
-                                    requested_changes: request.requested_changes
+                                    requested_changes: request.payload
                                   })}
                                 >
                                   <CheckCircle2 className="w-4 h-4 mr-1" />
@@ -478,7 +472,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                                 <p className="text-sm mt-1"><strong>Resolution:</strong> {query.resolution_note}</p>
                               )}
                             </div>
-                            {query.status === 'open' && (
+                            {(query.status === 'pending' || query.status === 'open') && (
                               <div className="flex space-x-2 mt-3">
                                 <Button 
                                   size="sm" 

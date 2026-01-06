@@ -149,7 +149,9 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
       const productName = product?.name || "";
 
       if (editData) {
-        // Update delivery - always set status to "delivered"
+        // Update delivery - reset confirmation fields so customer can re-confirm
+        const newConfirmationDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+        
         const { error: deliveryError } = await supabase
           .from("deliveries")
           .update({
@@ -161,10 +163,29 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
             total_amount,
             delivery_status: "delivered",
             delivery_note_no: data.delivery_note_no,
+            // Reset confirmation status so customer can re-confirm
+            customer_confirmed: false,
+            confirmed_at: null,
+            auto_confirmed: false,
+            discrepancy_flag: false,
+            discrepancy_notes: null,
+            confirmation_deadline: newConfirmationDeadline,
           })
           .eq("id", editData.id);
         
         if (deliveryError) throw deliveryError;
+
+        // Mark any pending/open delivery queries as 'admin_updated'
+        await supabase
+          .from("delivery_queries")
+          .update({ 
+            status: 'admin_updated',
+            resolved_by: user?.id,
+            resolved_at: new Date().toISOString(),
+            resolution_note: 'Delivery updated by MasterAdmin - please re-confirm'
+          })
+          .eq("delivery_id", editData.id)
+          .in("status", ["pending", "open"]);
 
         // Update delivery items
         const { error: itemsError } = await supabase
@@ -186,6 +207,14 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
           }]);
         
         if (insertItemError) throw insertItemError;
+
+        // Send notification to customer about the update
+        try {
+          await NotificationService.sendDeliveryNotification(editData.id);
+          console.log('Delivery update notification sent to customer');
+        } catch (notifError) {
+          console.error('Failed to send delivery update notification:', notifError);
+        }
       } else {
         // Insert delivery - always set status to "delivered"
         const { data: deliveryData, error: deliveryError } = await supabase
