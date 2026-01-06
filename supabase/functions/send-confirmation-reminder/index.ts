@@ -78,6 +78,9 @@ async function sendWhatsApp(phone: string, message: string) {
   }
 }
 
+// Secret token for cron job authentication
+const CRON_SECRET = Deno.env.get("CRON_SECRET");
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -85,6 +88,18 @@ serve(async (req) => {
   }
 
   try {
+    // Verify cron secret to prevent unauthorized access
+    const authHeader = req.headers.get("Authorization");
+    const providedSecret = authHeader?.replace("Bearer ", "");
+    
+    if (!CRON_SECRET || providedSecret !== CRON_SECRET) {
+      console.error("Unauthorized access attempt to send-confirmation-reminder");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
