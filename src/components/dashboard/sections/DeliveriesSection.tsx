@@ -51,6 +51,7 @@ export function DeliveriesSection() {
       if (error) throw error;
       return data;
     },
+    refetchInterval: 5000,
   });
 
   const getConfirmationStatus = (delivery: any) => {

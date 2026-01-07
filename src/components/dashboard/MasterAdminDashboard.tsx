@@ -503,7 +503,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           </div>
         );
       case "dashboard":
-        return <DashboardSection />;
+        return <DashboardSection onNavigateToTab={setActiveTab} />;
       case "deliveries":
         return <DeliveriesSection />;
       case "payments":
@@ -519,7 +519,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
       case "exports":
         return <BulkExportSection />;
       default:
-        return <DashboardSection />;
+        return <DashboardSection onNavigateToTab={setActiveTab} />;
     }
   };
 
