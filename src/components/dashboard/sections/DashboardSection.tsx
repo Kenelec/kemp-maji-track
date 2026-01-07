@@ -71,7 +71,7 @@ export function DashboardSection({ onNavigateToTab }: DashboardSectionProps) {
     queryKey: ["payments-stats", paymentPeriod],
     queryFn: async () => {
       const dateRange = getDateRange(paymentPeriod);
-      let query = supabase.from("payments").select("*");
+      let query = supabase.from("payments").select("*").gt("amount", 0); // Only payments with actual amounts
       
       if (dateRange) {
         const { start, end } = dateRange;
@@ -84,6 +84,7 @@ export function DashboardSection({ onNavigateToTab }: DashboardSectionProps) {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: 5000,
   });
 
   const { data: mpesaPaymentsData } = useQuery({
@@ -93,7 +94,7 @@ export function DashboardSection({ onNavigateToTab }: DashboardSectionProps) {
       let query = supabase.from("payments")
         .select("*")
         .eq("payment_method", "mpesa")
-        .eq("status", "paid");
+        .gt("amount", 0); // Count any M-Pesa payment received
       
       if (dateRange) {
         query = query
@@ -105,6 +106,7 @@ export function DashboardSection({ onNavigateToTab }: DashboardSectionProps) {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: 5000,
   });
 
   const { data: outstandingPayments } = useQuery({
@@ -120,7 +122,8 @@ export function DashboardSection({ onNavigateToTab }: DashboardSectionProps) {
     refetchInterval: 5000,
   });
 
-  const cashPayments = paymentsData?.filter(p => p.payment_method === "cash" && p.status === "paid") || [];
+  // Count all cash payments regardless of status (any cash received)
+  const cashPayments = paymentsData?.filter(p => p.payment_method === "cash" && Number(p.amount || 0) > 0) || [];
   const cashTotal = cashPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const mpesaTotal = mpesaPaymentsData?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
   
