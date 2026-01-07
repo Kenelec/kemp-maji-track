@@ -40,17 +40,20 @@ export function PaymentsSection() {
           customers (customer_name),
           deliveries (
             total_amount,
+            delivery_date,
             delivery_items (
               product_name,
               quantity
             )
           )
         `)
-        .order("due_date", { ascending: false });
+        .gt("amount", 0) // Only show payments with actual amounts paid
+        .order("created_at", { ascending: false });
       
       if (error) throw error;
       return data;
     },
+    refetchInterval: 5000,
   });
 
   const deleteMutation = useMutation({
