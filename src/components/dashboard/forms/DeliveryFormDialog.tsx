@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -61,6 +61,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [calendarOpen, setCalendarOpen] = useState(false);
   
   const form = useForm<DeliveryFormData>({
     resolver: zodResolver(deliverySchema),
@@ -249,6 +250,24 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
         
         if (itemsError) throw itemsError;
 
+        // Create payment record for the delivery
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 7); // Due in 7 days
+        
+        const { error: paymentError } = await supabase
+          .from("payments")
+          .insert([{
+            customer_id: data.customer_id,
+            delivery_id: deliveryData.id,
+            amount: 0,
+            due_date: format(dueDate, "yyyy-MM-dd"),
+            status: "pending",
+          }]);
+        
+        if (paymentError) {
+          console.error('Failed to create payment record:', paymentError);
+        }
+
         // Send delivery notification to customer
         try {
           await NotificationService.sendDeliveryNotification(deliveryData.id);
@@ -260,6 +279,9 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["outstanding-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["payments-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
       toast({
         title: editData ? "Delivery updated" : "Delivery created",
         description: editData 
@@ -384,7 +406,7 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
               render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>Delivery Date</FormLabel>
-                  <Popover>
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
@@ -407,7 +429,10 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={(date) => {
+                          field.onChange(date);
+                          setCalendarOpen(false);
+                        }}
                         initialFocus
                         className="pointer-events-auto"
                       />

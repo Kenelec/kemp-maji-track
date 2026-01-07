@@ -7,7 +7,11 @@ import { Users, Truck, AlertCircle, CreditCard } from "lucide-react";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from "date-fns";
 import { OverduePaymentsDialog } from "./OverduePaymentsDialog";
 
-export function DashboardSection() {
+interface DashboardSectionProps {
+  onNavigateToTab?: (tabId: string) => void;
+}
+
+export function DashboardSection({ onNavigateToTab }: DashboardSectionProps) {
   const [deliveryPeriod, setDeliveryPeriod] = useState("today");
   const [paymentPeriod, setPaymentPeriod] = useState("today");
   const [mpesaPeriod, setMpesaPeriod] = useState("today");
@@ -40,6 +44,7 @@ export function DashboardSection() {
       if (error) throw error;
       return count || 0;
     },
+    refetchInterval: 10000,
   });
 
   const { data: deliveriesData } = useQuery({
@@ -59,6 +64,7 @@ export function DashboardSection() {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: 5000,
   });
 
   const { data: paymentsData } = useQuery({
@@ -111,6 +117,7 @@ export function DashboardSection() {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: 5000,
   });
 
   const cashPayments = paymentsData?.filter(p => p.payment_method === "cash" && p.status === "paid") || [];
@@ -136,7 +143,10 @@ export function DashboardSection() {
       {/* Compact Grid Layout for Laptop Screens */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
         {/* Customer Stats */}
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("customers")}
+        >
           <CardHeader className="p-3">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Users className="w-4 h-4 text-primary" />
@@ -149,7 +159,10 @@ export function DashboardSection() {
         </Card>
 
         {/* Deliveries Stats */}
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("deliveries")}
+        >
           <CardHeader className="p-3">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Truck className="w-4 h-4 text-secondary" />
@@ -157,7 +170,7 @@ export function DashboardSection() {
             </CardTitle>
             <CardDescription className="mt-1">
               <Select value={deliveryPeriod} onValueChange={setDeliveryPeriod}>
-                <SelectTrigger className="w-full h-7 text-xs">
+                <SelectTrigger className="w-full h-7 text-xs" onClick={(e) => e.stopPropagation()}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -176,7 +189,10 @@ export function DashboardSection() {
         </Card>
 
         {/* Cash Payments */}
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("payments")}
+        >
           <CardHeader className="p-3">
             <CardTitle className="flex items-center gap-2 text-sm">
               <CreditCard className="w-4 h-4 text-accent" />
@@ -184,7 +200,7 @@ export function DashboardSection() {
             </CardTitle>
             <CardDescription className="mt-1">
               <Select value={paymentPeriod} onValueChange={setPaymentPeriod}>
-                <SelectTrigger className="w-full h-7 text-xs">
+                <SelectTrigger className="w-full h-7 text-xs" onClick={(e) => e.stopPropagation()}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -203,7 +219,10 @@ export function DashboardSection() {
         </Card>
 
         {/* M-Pesa Payments */}
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("payments")}
+        >
           <CardHeader className="p-3">
             <CardTitle className="flex items-center gap-2 text-sm">
               <CreditCard className="w-4 h-4 text-accent" />
@@ -211,7 +230,7 @@ export function DashboardSection() {
             </CardTitle>
             <CardDescription className="mt-1">
               <Select value={mpesaPeriod} onValueChange={setMpesaPeriod}>
-                <SelectTrigger className="w-full h-7 text-xs">
+                <SelectTrigger className="w-full h-7 text-xs" onClick={(e) => e.stopPropagation()}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
