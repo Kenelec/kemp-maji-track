@@ -68,6 +68,16 @@ Deno.serve(async (req) => {
 
     const customer = Array.isArray(delivery.customers) ? delivery.customers[0] : delivery.customers;
     
+    // Log customer contact info for debugging
+    console.log('=== Delivery Confirmation Debug ===');
+    console.log('Delivery ID:', delivery_id);
+    console.log('Customer:', customer?.customer_name);
+    console.log('Customer contact info:', {
+      phone: customer?.phone || 'NOT SET',
+      email: customer?.email || 'NOT SET',
+      user_id: customer?.user_id || 'NOT SET'
+    });
+    
     if (!customer?.phone && !customer?.email) {
       console.error('Customer has no phone or email:', delivery_id);
       return new Response(
@@ -113,6 +123,8 @@ Deno.serve(async (req) => {
       } else if (!phoneNumber.startsWith('+')) {
         phoneNumber = '+254' + phoneNumber;
       }
+      
+      console.log('Formatted phone number:', phoneNumber);
 
       let notificationChannel = 'whatsapp';
       let notificationSuccess = false;
@@ -120,7 +132,7 @@ Deno.serve(async (req) => {
 
       try {
         // Try WhatsApp first
-        console.log('Attempting WhatsApp delivery confirmation...');
+        console.log('Attempting WhatsApp delivery confirmation to:', phoneNumber);
         const whatsappResponse = await fetch('https://api.africastalking.com/version1/messaging', {
           method: 'POST',
           headers: {
@@ -136,7 +148,7 @@ Deno.serve(async (req) => {
         });
 
         const whatsappData = await whatsappResponse.json();
-        console.log('WhatsApp API response:', whatsappData);
+        console.log('WhatsApp API response:', JSON.stringify(whatsappData));
 
         // Check if WhatsApp succeeded
         if (whatsappData.SMSMessageData?.Recipients?.[0]?.status === 'Success') {
@@ -164,7 +176,7 @@ Deno.serve(async (req) => {
           });
 
           const smsData = await smsResponse.json();
-          console.log('SMS API response:', smsData);
+          console.log('SMS API response:', JSON.stringify(smsData));
 
           notificationSuccess = smsData.SMSMessageData?.Recipients?.[0]?.status === 'Success';
           notificationRef = smsData.SMSMessageData?.Recipients?.[0]?.messageId;
@@ -172,16 +184,40 @@ Deno.serve(async (req) => {
         }
 
         // Log notification (WhatsApp or SMS)
-        await supabase.from('notifications_log').insert({
+        const logResult = await supabase.from('notifications_log').insert({
           user_id: customer.user_id,
           channel: notificationChannel,
           content: smsMessage,
           status: notificationSuccess ? 'delivered' : 'failed',
           provider_ref: notificationRef
         });
+        console.log('SMS/WhatsApp log insert result:', logResult.error ? logResult.error.message : 'success');
       } catch (error) {
         console.error('Notification error:', error);
         results.sms = { success: false, error: 'Failed to send notification' };
+        
+        // Log the failed attempt
+        await supabase.from('notifications_log').insert({
+          user_id: customer.user_id,
+          channel: 'sms',
+          content: `FAILED: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          status: 'failed',
+          provider_ref: null
+        });
+      }
+    } else {
+      console.log('No phone number available for customer, skipping SMS/WhatsApp');
+      results.sms = { success: false, reason: 'No phone number' };
+      
+      // Log skipped SMS
+      if (customer.user_id) {
+        await supabase.from('notifications_log').insert({
+          user_id: customer.user_id,
+          channel: 'sms',
+          content: 'Skipped - no phone number available',
+          status: 'skipped',
+          provider_ref: null
+        });
       }
     }
 
@@ -189,6 +225,18 @@ Deno.serve(async (req) => {
     if (customer.email) {
       try {
         console.log('Attempting to send email to:', customer.email);
+        console.log('Using Resend API key:', Deno.env.get('RESEND_API_KEY') ? 'SET (length: ' + Deno.env.get('RESEND_API_KEY')!.length + ')' : 'NOT SET');
+        
+        const emailPayload = {
+          // NOTE: 'onboarding@resend.dev' only sends to the Resend account owner's email
+          // For production, verify your domain at https://resend.com/domains
+          // Then change to: 'Kemp Water <noreply@yourdomain.com>'
+          from: 'Kemp Water <onboarding@resend.dev>',
+          to: [customer.email],
+          subject: `Delivery Confirmation - ${deliveryDate}`,
+          html: emailHtml
+        };
+        console.log('Email payload:', JSON.stringify({ ...emailPayload, html: '[HTML content]' }));
         
         const emailResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -196,48 +244,64 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`
           },
-          body: JSON.stringify({
-            // NOTE: 'onboarding@resend.dev' only sends to the Resend account owner's email
-            // For production, verify your domain at https://resend.com/domains
-            // Then change to: 'Kemp Water <noreply@yourdomain.com>'
-            from: 'Kemp Water <onboarding@resend.dev>',
-            to: [customer.email],
-            subject: `Delivery Confirmation - ${deliveryDate}`,
-            html: emailHtml
-          })
+          body: JSON.stringify(emailPayload)
         });
 
         const emailData = await emailResponse.json();
         const emailSuccess = emailResponse.ok && !emailData.error;
+        console.log('Email API response status:', emailResponse.status);
         console.log('Email API response:', JSON.stringify(emailData));
-        console.log('Email status:', emailSuccess ? 'success' : 'failed');
+        console.log('Email status:', emailSuccess ? 'SUCCESS' : 'FAILED');
         
         results.email = { success: emailSuccess };
 
-        // Log Email notification
-        await supabase.from('notifications_log').insert({
+        // Log Email notification with detailed error info
+        const emailLogContent = emailSuccess 
+          ? emailHtml.substring(0, 500)
+          : `FAILED: ${emailData.error?.message || emailData.message || JSON.stringify(emailData)} - To: ${customer.email}`;
+          
+        const emailLogResult = await supabase.from('notifications_log').insert({
           user_id: customer.user_id,
           channel: 'email',
-          content: emailHtml.substring(0, 500),
+          content: emailLogContent,
           status: emailSuccess ? 'delivered' : 'failed',
           provider_ref: emailData.id || null
         });
+        console.log('Email log insert result:', emailLogResult.error ? emailLogResult.error.message : 'success');
         
         if (!emailSuccess) {
-          console.error('Email failed. Resend error:', emailData.error || emailData);
-          console.log('TIP: onboarding@resend.dev only works for the account owner email.');
-          console.log('To send to other emails, verify a domain at https://resend.com/domains');
+          console.error('=== EMAIL FAILURE DETAILS ===');
+          console.error('Resend error:', JSON.stringify(emailData));
+          console.error('Response status:', emailResponse.status);
+          console.error('IMPORTANT: onboarding@resend.dev only works for the Resend account owner email.');
+          console.error('To send to other customers, you must:');
+          console.error('1. Verify a custom domain at https://resend.com/domains');
+          console.error('2. Update the from address to use your verified domain');
         }
       } catch (error) {
-        console.error('Email error:', error);
+        console.error('Email exception:', error);
         results.email = { success: false, error: 'Failed to send email' };
         
-        // Log failed attempt
+        // Log failed attempt with error details
         await supabase.from('notifications_log').insert({
           user_id: customer.user_id,
           channel: 'email',
-          content: 'Email send attempt failed',
+          content: `EXCEPTION: ${error instanceof Error ? error.message : 'Unknown error'}`,
           status: 'failed',
+          provider_ref: null
+        });
+      }
+    } else {
+      console.log('No email address available for customer, skipping email');
+      results.email = { success: false, reason: 'No email address' };
+      
+      // Log skipped email
+      if (customer.user_id) {
+        await supabase.from('notifications_log').insert({
+          user_id: customer.user_id,
+          channel: 'email',
+          content: 'Skipped - no email address available',
+          status: 'skipped',
           provider_ref: null
         });
       }
