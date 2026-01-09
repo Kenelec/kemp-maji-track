@@ -55,15 +55,9 @@ interface DeliveryQuery {
   resolved_at: string | null;
   resolved_by: string | null;
   status: string;
-  admin_resolution_notes: string | null;
-  master_admin_approved: boolean | null;
-  master_admin_approved_by: string | null;
-  master_admin_approved_at: string | null;
-  admin_resolved_by: string | null;
-  admin_resolved_at: string | null;
   requires_approval: boolean | null;
   approval_request_id: string | null;
-  created_at: string;
+  created_at: string | null;
 }
 
 interface DriverLocation {
@@ -212,14 +206,14 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           if (targetError) throw targetError;
         }
       } else if (table === 'delivery_queries') {
-        // Update the delivery query status
+        // Update the delivery query status using existing columns
         const { error: updateError } = await supabase
           .from('delivery_queries')
           .update({
             status: 'resolved',
-            master_admin_approved: true,
-            master_admin_approved_by: user?.id,
-            master_admin_approved_at: new Date().toISOString()
+            resolved_by: user?.id,
+            resolved_at: new Date().toISOString(),
+            resolution_note: 'Approved by Master Admin'
           })
           .eq('id', id);
 
@@ -251,9 +245,9 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           .from('delivery_queries')
           .update({
             status: 'rejected',
-            master_admin_approved: false,
-            master_admin_approved_by: user?.id,
-            master_admin_approved_at: new Date().toISOString()
+            resolved_by: user?.id,
+            resolved_at: new Date().toISOString(),
+            resolution_note: rejectionReason || 'Rejected by Master Admin'
           })
           .eq('id', id);
 
@@ -465,9 +459,6 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                             </div>
                             <div className="mt-2">
                               <p className="text-sm"><strong>Message:</strong> {query.message}</p>
-                              {query.admin_resolution_notes && (
-                                <p className="text-sm mt-1"><strong>Admin Notes:</strong> {query.admin_resolution_notes}</p>
-                              )}
                               {query.resolution_note && (
                                 <p className="text-sm mt-1"><strong>Resolution:</strong> {query.resolution_note}</p>
                               )}
