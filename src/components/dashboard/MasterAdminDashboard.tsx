@@ -58,6 +58,16 @@ interface DeliveryQuery {
   requires_approval: boolean | null;
   approval_request_id: string | null;
   created_at: string | null;
+  customers?: {
+    customer_name: string;
+    email: string | null;
+    phone: string | null;
+    user_id: string | null;
+  } | null;
+  deliveries?: {
+    delivery_date: string;
+    total_amount: number;
+  } | null;
 }
 
 interface DriverLocation {
@@ -68,10 +78,8 @@ interface DriverLocation {
   accuracy: number | null;
   timestamp: number | null;
   created_at: string;
-  users: {
-    name: string;
-    phone: string | null;
-  } | null;
+  driver_name?: string;
+  driver_phone?: string | null;
 }
 
 interface MasterAdminDashboardProps {
@@ -104,42 +112,67 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
         .select('*')
         .order('requested_at', { ascending: false });
 
-      if (requestsError) throw requestsError;
+      if (requestsError) {
+        console.error('Error fetching approval requests:', requestsError);
+      }
 
-      // Fetch delivery queries
+      // Fetch delivery queries with customer and delivery info
       const { data: queriesData, error: queriesError } = await supabase
         .from('delivery_queries')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (queriesError) throw queriesError;
-
-      // Fetch driver locations (last 24 hours)
-      const { data: locationsData, error: locationsError } = await supabase
-        .from('driver_locations')
         .select(`
           *,
-          users!inner (name, phone)
+          customers (customer_name, email, phone, user_id),
+          deliveries (delivery_date, total_amount)
         `)
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
         .order('created_at', { ascending: false });
 
-      if (locationsError) throw locationsError;
+      if (queriesError) {
+        console.error('Error fetching delivery queries:', queriesError);
+      }
 
-      // Get unique drivers with latest location
-      const uniqueDrivers = new Map();
-      locationsData?.forEach(location => {
-        if (!uniqueDrivers.has(location.driver_id) ||
-            new Date(location.created_at) > new Date(uniqueDrivers.get(location.driver_id).created_at)) {
-          uniqueDrivers.set(location.driver_id, location);
+      // Set data even if some fetches failed
+      setApprovalRequests(requestsData || []);
+      setDeliveryQueries(queriesData || []);
+
+      // Fetch driver locations SEPARATELY to prevent breaking the whole fetch
+      try {
+        const { data: locationsData, error: locationsError } = await supabase
+          .from('driver_locations')
+          .select('*')
+          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false });
+
+        if (!locationsError && locationsData) {
+          // Get driver names from drivers table separately
+          const driverIds = [...new Set(locationsData.map(l => l.driver_id))];
+          const { data: driversData } = await supabase
+            .from('drivers')
+            .select('id, name, phone')
+            .in('id', driverIds);
+          
+          // Map driver info to locations
+          const driversMap = new Map(driversData?.map(d => [d.id, d]) || []);
+          const locationsWithDriverInfo = locationsData.map(loc => ({
+            ...loc,
+            driver_name: driversMap.get(loc.driver_id)?.name || 'Unknown',
+            driver_phone: driversMap.get(loc.driver_id)?.phone || null
+          }));
+
+          // Get unique drivers with latest location
+          const uniqueDrivers = new Map();
+          locationsWithDriverInfo.forEach(location => {
+            if (!uniqueDrivers.has(location.driver_id) ||
+                new Date(location.created_at!) > new Date(uniqueDrivers.get(location.driver_id).created_at)) {
+              uniqueDrivers.set(location.driver_id, location);
+            }
+          });
+          setDriverLocations(Array.from(uniqueDrivers.values()));
         }
-      });
-
-      setApprovalRequests(requestsData as any || []);
-      setDeliveryQueries(queriesData as any || []);
-      setDriverLocations(Array.from(uniqueDrivers.values()));
+      } catch (locError) {
+        console.error('Error fetching driver locations (non-critical):', locError);
+      }
     } catch (error) {
-      console.error('Error fetching dashboard data', error);
+      console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
     }
@@ -206,7 +239,14 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           if (targetError) throw targetError;
         }
       } else if (table === 'delivery_queries') {
-        // Update the delivery query status using existing columns
+        // First get the query with customer info
+        const { data: queryData } = await supabase
+          .from('delivery_queries')
+          .select('customer_id, query_type, customers(user_id, customer_name)')
+          .eq('id', id)
+          .single();
+
+        // Update the delivery query status
         const { error: updateError } = await supabase
           .from('delivery_queries')
           .update({
@@ -218,6 +258,17 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           .eq('id', id);
 
         if (updateError) throw updateError;
+
+        // Send notification to customer
+        if (queryData?.customers?.user_id) {
+          await supabase.from('in_app_notifications').insert({
+            user_id: queryData.customers.user_id,
+            type: 'query_resolved',
+            title: 'Query Resolved',
+            message: `Your ${queryData.query_type.replace('_', ' ')} query has been resolved.`,
+            metadata: { delivery_query_id: id }
+          });
+        }
       }
 
       fetchDashboardData(); // Refresh the data
@@ -241,6 +292,13 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
 
         if (updateError) throw updateError;
       } else if (table === 'delivery_queries') {
+        // First get the query with customer info
+        const { data: queryData } = await supabase
+          .from('delivery_queries')
+          .select('customer_id, query_type, customers(user_id, customer_name)')
+          .eq('id', id)
+          .single();
+
         const { error: updateError } = await supabase
           .from('delivery_queries')
           .update({
@@ -252,6 +310,17 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           .eq('id', id);
 
         if (updateError) throw updateError;
+
+        // Send notification to customer
+        if (queryData?.customers?.user_id) {
+          await supabase.from('in_app_notifications').insert({
+            user_id: queryData.customers.user_id,
+            type: 'query_rejected',
+            title: 'Query Rejected',
+            message: `Your ${queryData.query_type.replace('_', ' ')} query was rejected: ${rejectionReason || 'No reason provided'}`,
+            metadata: { delivery_query_id: id }
+          });
+        }
       }
 
       fetchDashboardData(); // Refresh the data
@@ -431,13 +500,14 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                                 <MessageCircle className="w-4 h-4 text-blue-600" />
                                 <div>
                                   <h3 className="font-medium">
-                                    Query: {query.query_type}
+                                    Query: {query.query_type.replace('_', ' ')}
                                   </h3>
                                   <p className="text-sm text-muted-foreground">
-                                    From: Customer ID {query.customer_id}
+                                    From: {query.customers?.customer_name || `Customer ID ${query.customer_id.slice(0, 8)}...`}
                                   </p>
                                   <p className="text-sm text-muted-foreground">
-                                    Delivery ID: {query.delivery_id}
+                                    Delivery: {query.deliveries?.delivery_date ? new Date(query.deliveries.delivery_date).toLocaleDateString() : query.delivery_id.slice(0, 8) + '...'} 
+                                    {query.deliveries?.total_amount && ` - KSh ${query.deliveries.total_amount.toLocaleString()}`}
                                   </p>
                                 </div>
                               </div>

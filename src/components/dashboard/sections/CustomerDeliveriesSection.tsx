@@ -33,6 +33,12 @@ interface DeliveryWithItems {
     total_price: number;
   }>;
   hasOpenQuery?: boolean;
+  latestQuery?: {
+    id: string;
+    status: string;
+    resolution_note: string | null;
+    query_type: string;
+  } | null;
 }
 
 const getDateRange = (period: string) => {
@@ -89,17 +95,21 @@ export function CustomerDeliveriesSection() {
             .select("product_name, quantity, unit_price, total_price")
             .eq("delivery_id", delivery.id);
           
-          // Check if there's an open query for this delivery
+          // Check for queries and get latest status
           const { data: queries } = await supabase
             .from("delivery_queries")
-            .select("id")
+            .select("id, status, resolution_note, query_type")
             .eq("delivery_id", delivery.id)
+            .order('created_at', { ascending: false })
             .limit(1);
+          
+          const latestQuery = queries?.[0] || null;
           
           return { 
             ...delivery, 
             delivery_items: items || [],
-            hasOpenQuery: (queries?.length || 0) > 0
+            hasOpenQuery: latestQuery && (latestQuery.status === 'pending' || latestQuery.status === 'open'),
+            latestQuery
           } as DeliveryWithItems;
         })
       );
@@ -258,7 +268,9 @@ export function CustomerDeliveriesSection() {
                             {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
                               delivery.delivery_items.map((item, idx) => (
                                 <div key={idx} className="text-sm">
-                                  {item.product_name} x {item.quantity}
+                                  <span className="font-medium">{item.product_name}</span>
+                                  <span className="text-muted-foreground"> x {item.quantity}</span>
+                                  <span className="text-muted-foreground"> @ KSh {item.unit_price.toLocaleString()}</span>
                                 </div>
                               ))
                             ) : (
@@ -275,11 +287,32 @@ export function CustomerDeliveriesSection() {
                           {delivery.drivers?.name || "-"}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <ConfirmIcon className={`w-4 h-4 ${confirmStatus.color}`} />
-                            <span className={`text-sm ${confirmStatus.color}`}>
-                              {confirmStatus.label}
-                            </span>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              <ConfirmIcon className={`w-4 h-4 ${confirmStatus.color}`} />
+                              <span className={`text-sm ${confirmStatus.color}`}>
+                                {confirmStatus.label}
+                              </span>
+                            </div>
+                            {delivery.latestQuery && (
+                              <div>
+                                <Badge 
+                                  variant="secondary"
+                                  className={
+                                    delivery.latestQuery.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                                    delivery.latestQuery.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                    'bg-yellow-100 text-yellow-800'
+                                  }
+                                >
+                                  Query: {delivery.latestQuery.status}
+                                </Badge>
+                                {delivery.latestQuery.resolution_note && (
+                                  <p className="text-xs text-muted-foreground mt-1 max-w-[150px] truncate" title={delivery.latestQuery.resolution_note}>
+                                    {delivery.latestQuery.resolution_note}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
