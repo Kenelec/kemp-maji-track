@@ -23,6 +23,7 @@ import { CustomerStatementsSection } from "./sections/CustomerStatementsSection"
 import { CustomerDeliveriesSection } from "./sections/CustomerDeliveriesSection";
 import { CustomerMpesaPaymentForm } from "./sections/CustomerMpesaPaymentForm";
 import { CustomerDeliveryDiscrepancyDialog } from "./sections/CustomerDeliveryDiscrepancyDialog";
+import { NotificationCenter } from "./NotificationCenter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInDays, isBefore } from "date-fns";
@@ -218,6 +219,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <NotificationCenter userId={user?.id} />
             <span className="text-sm text-muted-foreground hidden md:block">
               Welcome, {user?.email?.split('@')[0] || 'User'}
             </span>
