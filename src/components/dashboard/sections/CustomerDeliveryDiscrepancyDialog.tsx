@@ -77,7 +77,8 @@ export function CustomerDeliveryDiscrepancyDialog({
       if (!queryType) throw new Error("Please select a query type");
       if (!message.trim()) throw new Error("Please describe the issue");
 
-      const { error } = await supabase
+      // Insert the delivery query and get the ID
+      const { data: queryResult, error } = await supabase
         .from("delivery_queries")
         .insert({
           delivery_id: delivery.id,
@@ -86,11 +87,13 @@ export function CustomerDeliveryDiscrepancyDialog({
           message: message.trim(),
           status: "pending",
           requires_approval: true,
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
 
-      // Mark delivery as having a discrepancy - with error handling
+      // Mark delivery as having a discrepancy
       const { error: updateError } = await supabase
         .from("deliveries")
         .update({
@@ -101,8 +104,37 @@ export function CustomerDeliveryDiscrepancyDialog({
 
       if (updateError) {
         console.error("Failed to update discrepancy_flag:", updateError);
-        // Still throw to trigger proper error handling
-        throw new Error("Query submitted but failed to flag delivery. Please contact support.");
+      }
+
+      // Fetch all Master Admin user IDs (role_id for MasterAdmin)
+      const { data: masterAdminRole } = await supabase
+        .from('user_roles')
+        .select('id')
+        .eq('name', 'MasterAdmin')
+        .single();
+
+      if (masterAdminRole) {
+        const { data: masterAdmins } = await supabase
+          .from('users')
+          .select('id')
+          .eq('role_id', masterAdminRole.id);
+
+        // Send notification to each Master Admin
+        if (masterAdmins && masterAdmins.length > 0) {
+          const notifications = masterAdmins.map(admin => ({
+            user_id: admin.id,
+            type: 'query_submitted',
+            title: 'New Customer Query',
+            message: `A customer reported "${queryType.replace('_', ' ')}" issue on delivery dated ${format(new Date(delivery.delivery_date), 'MMM d, yyyy')}`,
+            metadata: { 
+              delivery_query_id: queryResult.id,
+              delivery_id: delivery.id,
+              customer_id: customer.id 
+            }
+          }));
+          
+          await supabase.from('in_app_notifications').insert(notifications);
+        }
       }
     },
     onSuccess: async () => {
