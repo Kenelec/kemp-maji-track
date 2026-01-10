@@ -7,15 +7,19 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useInAppNotifications } from "@/hooks/useInAppNotifications";
+import { useInAppNotifications, InAppNotification } from "@/hooks/useInAppNotifications";
 import { formatDistanceToNow } from "date-fns";
+import { useState } from "react";
 
 interface NotificationCenterProps {
   userId: string | undefined;
+  onNavigateToApprovals?: () => void;
+  onNavigateToDelivery?: (deliveryId: string) => void;
 }
 
-export function NotificationCenter({ userId }: NotificationCenterProps) {
+export function NotificationCenter({ userId, onNavigateToApprovals, onNavigateToDelivery }: NotificationCenterProps) {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useInAppNotifications(userId);
+  const [open, setOpen] = useState(false);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -23,6 +27,10 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
         return '💰';
       case 'query_submitted':
         return '❓';
+      case 'query_resolved':
+        return '✅';
+      case 'query_rejected':
+        return '❌';
       case 'delivery_update':
         return '🚚';
       default:
@@ -30,8 +38,27 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
     }
   };
 
+  const handleNotificationClick = (notification: InAppNotification) => {
+    if (!notification.is_read) {
+      markAsRead(notification.id);
+    }
+    
+    // For Master Admins: query_submitted navigates to Approvals tab
+    if (notification.type === 'query_submitted' && onNavigateToApprovals) {
+      setOpen(false);
+      onNavigateToApprovals();
+    }
+    
+    // For Customers: query_resolved/rejected can highlight their delivery
+    if ((notification.type === 'query_resolved' || notification.type === 'query_rejected') 
+        && notification.metadata?.delivery_id && onNavigateToDelivery) {
+      setOpen(false);
+      onNavigateToDelivery(notification.metadata.delivery_id as string);
+    }
+  };
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
@@ -73,7 +100,7 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
                   className={`p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
                     !notification.is_read ? 'bg-primary/5' : ''
                   }`}
-                  onClick={() => !notification.is_read && markAsRead(notification.id)}
+                  onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex items-start gap-3">
                     <div className="text-2xl flex-shrink-0">

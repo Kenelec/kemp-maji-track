@@ -29,6 +29,7 @@ export function DeliveriesSection() {
   const [editingDelivery, setEditingDelivery] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deliveryToDelete, setDeliveryToDelete] = useState<string | null>(null);
+  const [hasLinkedPayments, setHasLinkedPayments] = useState(false);
 
   const { data: deliveries, isLoading } = useQuery({
     queryKey: ["deliveries"],
@@ -100,7 +101,15 @@ export function DeliveriesSection() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    // Check if any payments are linked to this delivery
+    const { data: linkedPayments } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("delivery_id", id)
+      .limit(1);
+    
+    setHasLinkedPayments(linkedPayments && linkedPayments.length > 0);
     setDeliveryToDelete(id);
     setDeleteDialogOpen(true);
   };
@@ -228,16 +237,23 @@ export function DeliveriesSection() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Delivery</AlertDialogTitle>
+            <AlertDialogTitle>
+              {hasLinkedPayments ? "Cannot Delete Delivery" : "Delete Delivery"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this delivery? This action cannot be undone.
+              {hasLinkedPayments 
+                ? "This delivery has linked payment records. Please delete the associated payments first before deleting this delivery."
+                : "Are you sure you want to delete this delivery? This action cannot be undone."
+              }
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
-              Delete
-            </AlertDialogAction>
+            {!hasLinkedPayments && (
+              <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+                Delete
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

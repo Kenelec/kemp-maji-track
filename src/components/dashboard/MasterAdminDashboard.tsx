@@ -603,7 +603,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <NotificationCenter userId={user?.id} />
+            <NotificationCenter userId={user?.id} onNavigateToApprovals={() => setActiveTab('approvals')} />
             <span className="text-sm text-muted-foreground">
               Welcome, {user?.email}
             </span>

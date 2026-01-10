@@ -25,12 +25,14 @@ interface DeliveryWithItems {
   discrepancy_flag: boolean | null;
   created_at: string;
   driver_id: string | null;
-  drivers?: { name: string } | null;
+  drivers?: { id: string; name: string; phone: string | null } | null;
   delivery_items?: Array<{
     product_name: string;
     quantity: number;
     unit_price: number;
     total_price: number;
+    product_id: string | null;
+    products?: { description: string | null } | null;
   }>;
   hasOpenQuery?: boolean;
   latestQuery?: {
@@ -74,7 +76,7 @@ export function CustomerDeliveriesSection() {
         .from("deliveries")
         .select(`
           *,
-          drivers (name)
+          drivers!deliveries_driver_id_fkey (id, name, phone)
         `)
         .order("delivery_date", { ascending: false });
 
@@ -92,7 +94,7 @@ export function CustomerDeliveriesSection() {
         (data || []).map(async (delivery) => {
           const { data: items } = await supabase
             .from("delivery_items")
-            .select("product_name, quantity, unit_price, total_price")
+            .select("product_name, quantity, unit_price, total_price, product_id, products (description)")
             .eq("delivery_id", delivery.id);
           
           // Check for queries and get latest status
@@ -247,6 +249,7 @@ export function CustomerDeliveriesSection() {
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Products</TableHead>
+                    <TableHead>Qty</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Driver</TableHead>
                     <TableHead>Status</TableHead>
@@ -269,14 +272,25 @@ export function CustomerDeliveriesSection() {
                               delivery.delivery_items.map((item, idx) => (
                                 <div key={idx} className="text-sm">
                                   <span className="font-medium">{item.product_name}</span>
-                                  <span className="text-muted-foreground"> x {item.quantity}</span>
-                                  <span className="text-muted-foreground"> @ KSh {item.unit_price.toLocaleString()}</span>
+                                  {item.products?.description && (
+                                    <span className="text-xs text-muted-foreground block">{item.products.description}</span>
+                                  )}
+                                  <span className="text-muted-foreground text-xs">@ KSh {item.unit_price.toLocaleString()}</span>
                                 </div>
                               ))
                             ) : (
-                              <span className="text-muted-foreground text-sm">
-                                {delivery.qty} units
-                              </span>
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
+                              delivery.delivery_items.map((item, idx) => (
+                                <div key={idx} className="text-sm">{item.quantity}</div>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground text-sm">{delivery.qty}</span>
                             )}
                           </div>
                         </TableCell>
