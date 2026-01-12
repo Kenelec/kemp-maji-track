@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { DeliveryFormDialog } from "../forms/DeliveryFormDialog";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import { format } from "date-fns";
@@ -23,6 +24,8 @@ import {
 
 export function DeliveriesSection() {
   const { toast } = useToast();
+  const { userRole } = useAuth();
+  const isMasterAdmin = userRole === 'MasterAdmin';
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
@@ -200,14 +203,16 @@ export function DeliveriesSection() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(delivery.id)}>
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
+                        {isMasterAdmin && (
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(delivery.id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

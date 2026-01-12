@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { ProductFormDialog } from "../forms/ProductFormDialog";
 import {
   AlertDialog,
@@ -20,6 +21,8 @@ import {
 
 export function ProductsSection() {
   const { toast } = useToast();
+  const { userRole } = useAuth();
+  const isMasterAdmin = userRole === 'MasterAdmin';
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
@@ -147,20 +150,24 @@ export function ProductsSection() {
                     <TableCell>{product.description || "—"}</TableCell>
                     <TableCell>{Number(product.unit_price).toLocaleString()}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(product)}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeletingId(product.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {isMasterAdmin && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(product)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingId(product.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
