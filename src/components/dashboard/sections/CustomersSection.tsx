@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Pencil, Trash2, Upload, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { CustomerFormDialog } from "../forms/CustomerFormDialog";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import { CustomerPaymentHistoryDialog } from "./CustomerPaymentHistoryDialog";
@@ -22,6 +23,8 @@ import {
 
 export function CustomersSection() {
   const { toast } = useToast();
+  const { userRole } = useAuth();
+  const isMasterAdmin = userRole === 'MasterAdmin';
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
@@ -138,20 +141,24 @@ export function CustomersSection() {
                       >
                         <History className="w-4 h-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(customer)}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeletingId(customer.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {isMasterAdmin && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(customer)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingId(customer.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -94,7 +94,7 @@ export function CustomerDeliveriesSection() {
         (data || []).map(async (delivery) => {
           const { data: items } = await supabase
             .from("delivery_items")
-            .select("product_name, quantity, unit_price, total_price, product_id, products (description)")
+            .select("product_name, quantity, unit_price, total_price, product_id, products:product_id (description)")
             .eq("delivery_id", delivery.id);
           
           // Check for queries and get latest status

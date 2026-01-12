@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, CheckCircle, Pencil, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { PaymentFormDialog } from "../forms/PaymentFormDialog";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import { format } from "date-fns";
@@ -23,6 +24,8 @@ import {
 
 export function PaymentsSection() {
   const { toast } = useToast();
+  const { userRole } = useAuth();
+  const isMasterAdmin = userRole === 'MasterAdmin';
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
@@ -217,7 +220,9 @@ export function PaymentsSection() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Products</TableHead>
                   <TableHead>Qty</TableHead>
-                  <TableHead>Amount</TableHead>
+                  <TableHead>Delivery Total</TableHead>
+                  <TableHead>Paid Amount</TableHead>
+                  <TableHead>Balance</TableHead>
                   <TableHead>Due Date</TableHead>
                   <TableHead>Payment Method</TableHead>
                   <TableHead>M-Pesa Code</TableHead>
@@ -254,7 +259,24 @@ export function PaymentsSection() {
                           "—"
                         )}
                       </TableCell>
-                      <TableCell className="font-semibold">KSh {Number(payment.amount).toLocaleString()}</TableCell>
+                      <TableCell className="font-semibold">
+                        {payment.deliveries?.total_amount 
+                          ? `KSh ${Number(payment.deliveries.total_amount).toLocaleString()}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="font-semibold text-green-600">
+                        KSh {Number(payment.amount).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        {payment.deliveries?.total_amount ? (
+                          <span className={Number(payment.deliveries.total_amount) - Number(payment.amount) > 0 
+                            ? "text-red-600" 
+                            : "text-green-600"
+                          }>
+                            KSh {(Number(payment.deliveries.total_amount) - Number(payment.amount)).toLocaleString()}
+                          </span>
+                        ) : "—"}
+                      </TableCell>
                       <TableCell>{format(new Date(payment.due_date), "MMM dd, yyyy")}</TableCell>
                       <TableCell className="capitalize">{payment.payment_method}</TableCell>
                       <TableCell>{payment.mpesa_code || "—"}</TableCell>
@@ -265,8 +287,8 @@ export function PaymentsSection() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {/* Only show Mark Paid button for pending payments */}
-                          {payment.status === "pending" && !label.includes('pending') && (
+                          {/* Only show Mark Paid button for pending payments - MasterAdmin only */}
+                          {isMasterAdmin && payment.status === "pending" && !label.includes('pending') && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -276,12 +298,16 @@ export function PaymentsSection() {
                               Mark Paid
                             </Button>
                           )}
-                          <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
+                          {isMasterAdmin && (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
