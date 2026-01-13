@@ -45,24 +45,40 @@ export function CustomerMpesaPaymentForm() {
     },
   });
 
-  // Fetch pending deliveries
+  // Fetch pending deliveries - only show truly unpaid deliveries without existing payments
   const { data: pendingDeliveries, isLoading } = useQuery({
     queryKey: ["pending-deliveries-for-payment", customer?.id],
     queryFn: async () => {
       if (!customer?.id) return [];
       
+      // Fetch deliveries that are unpaid only
       const { data, error } = await supabase
         .from("deliveries")
         .select("id, delivery_date, total_amount, payment_status")
         .eq("customer_id", customer.id)
-        .in("payment_status", ["unpaid", "pending"])
+        .eq("payment_status", "unpaid")
         .order("delivery_date", { ascending: false });
       
       if (error) throw error;
 
+      // Check for existing payment records for these deliveries
+      const deliveryIds = (data || []).map(d => d.id);
+      
+      if (deliveryIds.length === 0) return [];
+
+      const { data: existingPayments } = await supabase
+        .from("payments")
+        .select("delivery_id, status")
+        .in("delivery_id", deliveryIds)
+        .in("status", ["paid", "pending"]);
+
+      // Filter out deliveries that already have a paid or pending payment
+      const paidDeliveryIds = new Set(existingPayments?.map(p => p.delivery_id) || []);
+      const unpaidDeliveries = (data || []).filter(d => !paidDeliveryIds.has(d.id));
+
       // Fetch delivery items for each
       const deliveriesWithItems = await Promise.all(
-        (data || []).map(async (delivery) => {
+        unpaidDeliveries.map(async (delivery) => {
           const { data: items } = await supabase
             .from("delivery_items")
             .select("product_name, quantity")
@@ -78,7 +94,6 @@ export function CustomerMpesaPaymentForm() {
 
   // Validate M-Pesa code format
   const validateMpesaCodeFormat = (code: string): boolean => {
-    // M-Pesa codes are 10 alphanumeric characters
     const mpesaRegex = /^[A-Z0-9]{10}$/i;
     return mpesaRegex.test(code);
   };
@@ -131,6 +146,19 @@ export function CustomerMpesaPaymentForm() {
 
       // Create payment records for each selected delivery
       for (const delivery of selectedDeliveries) {
+        // First, check if a payment already exists for this delivery
+        const { data: existingPayment } = await supabase
+          .from("payments")
+          .select("id")
+          .eq("delivery_id", delivery.id)
+          .in("status", ["paid", "pending"])
+          .maybeSingle();
+
+        if (existingPayment) {
+          throw new Error(`A payment already exists for delivery on ${format(new Date(delivery.delivery_date), "MMM d, yyyy")}`);
+        }
+
+        // Create payment record
         const { error: paymentError } = await supabase
           .from("payments")
           .insert({
@@ -138,19 +166,21 @@ export function CustomerMpesaPaymentForm() {
             delivery_id: delivery.id,
             amount: delivery.total_amount,
             due_date: new Date().toISOString().split("T")[0],
-            status: "pending", // Will be verified by admin
+            status: "pending",
             payment_method: "mpesa",
             mpesa_code: code,
           });
 
         if (paymentError) throw paymentError;
 
-        // Update delivery payment status
+        // Update delivery - use 'partial' status (valid per constraint) and auto-confirm
         const { error: deliveryError } = await supabase
           .from("deliveries")
           .update({
-            payment_status: "pending",
+            payment_status: "partial",
             mpesa_transaction_id: code,
+            customer_confirmed: true,
+            confirmed_at: new Date().toISOString(),
           })
           .eq("id", delivery.id);
 
@@ -167,6 +197,7 @@ export function CustomerMpesaPaymentForm() {
       setValidationError("");
       queryClient.invalidateQueries({ queryKey: ["pending-deliveries-for-payment"] });
       queryClient.invalidateQueries({ queryKey: ["customer-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-deliveries"] });
     },
     onError: (error: Error) => {
       setValidationError(error.message);

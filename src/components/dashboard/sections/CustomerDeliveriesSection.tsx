@@ -32,7 +32,7 @@ interface DeliveryWithItems {
     unit_price: number;
     total_price: number;
     product_id: string | null;
-    products?: { description: string | null } | null;
+    description?: string | null;
   }>;
   hasOpenQuery?: boolean;
   latestQuery?: {
@@ -76,7 +76,7 @@ export function CustomerDeliveriesSection() {
         .from("deliveries")
         .select(`
           *,
-          drivers!deliveries_driver_id_fkey (id, name, phone)
+          drivers (id, name, phone)
         `)
         .order("delivery_date", { ascending: false });
 
@@ -89,13 +89,40 @@ export function CustomerDeliveriesSection() {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Fetch delivery items and check for open queries for each delivery
+      // Fetch delivery items for each delivery with product descriptions
       const deliveriesWithItems = await Promise.all(
         (data || []).map(async (delivery) => {
+          // Fetch delivery items
           const { data: items } = await supabase
             .from("delivery_items")
-            .select("product_name, quantity, unit_price, total_price, product_id, products:product_id (description)")
+            .select("product_name, quantity, unit_price, total_price, product_id")
             .eq("delivery_id", delivery.id);
+          
+          // Fetch product descriptions for each item
+          const itemsWithDescriptions = await Promise.all(
+            (items || []).map(async (item) => {
+              if (item.product_id) {
+                const { data: product } = await supabase
+                  .from("products")
+                  .select("description")
+                  .eq("id", item.product_id)
+                  .maybeSingle();
+                return { ...item, description: product?.description || null };
+              }
+              return { ...item, description: null };
+            })
+          );
+
+          // If no driver from join, fetch separately
+          let driverInfo = delivery.drivers;
+          if (!driverInfo && delivery.driver_id) {
+            const { data: driver } = await supabase
+              .from("drivers")
+              .select("id, name, phone")
+              .eq("id", delivery.driver_id)
+              .maybeSingle();
+            driverInfo = driver;
+          }
           
           // Check for queries and get latest status
           const { data: queries } = await supabase
@@ -109,7 +136,8 @@ export function CustomerDeliveriesSection() {
           
           return { 
             ...delivery, 
-            delivery_items: items || [],
+            drivers: driverInfo,
+            delivery_items: itemsWithDescriptions,
             hasOpenQuery: latestQuery && (latestQuery.status === 'pending' || latestQuery.status === 'open'),
             latestQuery
           } as DeliveryWithItems;
@@ -120,7 +148,7 @@ export function CustomerDeliveriesSection() {
     },
     refetchOnMount: 'always',
     staleTime: 0,
-    refetchInterval: 5000, // Refresh every 5 seconds to show buttons when MasterAdmin updates delivery
+    refetchInterval: 5000,
   });
 
   const confirmDeliveryMutation = useMutation({
@@ -152,10 +180,9 @@ export function CustomerDeliveriesSection() {
   });
 
   const canConfirmDelivery = (delivery: DeliveryWithItems) => {
-    // Hide buttons if already confirmed, auto-confirmed, has discrepancy flag, or has an open query
     if (delivery.customer_confirmed || delivery.auto_confirmed) return false;
     if (delivery.discrepancy_flag || delivery.hasOpenQuery) return false;
-    if (!delivery.confirmation_deadline) return true; // Allow if no deadline set
+    if (!delivery.confirmation_deadline) return true;
     return isBefore(new Date(), new Date(delivery.confirmation_deadline));
   };
 
@@ -272,8 +299,8 @@ export function CustomerDeliveriesSection() {
                               delivery.delivery_items.map((item, idx) => (
                                 <div key={idx} className="text-sm">
                                   <span className="font-medium">{item.product_name}</span>
-                                  {item.products?.description && (
-                                    <span className="text-xs text-muted-foreground block">{item.products.description}</span>
+                                  {item.description && (
+                                    <span className="text-xs text-muted-foreground block">{item.description}</span>
                                   )}
                                   <span className="text-muted-foreground text-xs">@ KSh {item.unit_price.toLocaleString()}</span>
                                 </div>
