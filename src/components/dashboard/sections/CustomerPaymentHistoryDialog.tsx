@@ -49,9 +49,9 @@ export function CustomerPaymentHistoryDialog({
     to: Date | undefined;
   }>({ from: undefined, to: undefined });
 
-  // Fetch deliveries for this customer
+  // Fetch deliveries for this customer (only existing deliveries)
   const { data: deliveries } = useQuery({
-    queryKey: ["customer-deliveries", customer?.id],
+    queryKey: ["customer-deliveries-history", customer?.id],
     queryFn: async () => {
       if (!customer?.id) return [];
       const { data, error } = await supabase
@@ -74,19 +74,29 @@ export function CustomerPaymentHistoryDialog({
     enabled: open && !!customer?.id,
   });
 
-  // Fetch payments for this customer
+  // Fetch payments for this customer - filter out orphaned payments (where delivery was deleted)
   const { data: payments } = useQuery({
-    queryKey: ["customer-payments", customer?.id],
+    queryKey: ["customer-payments-history", customer?.id],
     queryFn: async () => {
       if (!customer?.id) return [];
       const { data, error } = await supabase
         .from("payments")
-        .select("*")
+        .select(`
+          *,
+          deliveries (id)
+        `)
         .eq("customer_id", customer.id)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      return data || [];
+      
+      // Filter out payments where the delivery has been deleted
+      // Keep payments that either have no delivery_id or the delivery still exists
+      const validPayments = (data || []).filter(p => 
+        !p.delivery_id || p.deliveries !== null
+      );
+      
+      return validPayments;
     },
     enabled: open && !!customer?.id,
   });
