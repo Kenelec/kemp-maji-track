@@ -222,8 +222,8 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           .from('admin_approval_requests')
           .update({
             status: 'approved',
-            approved_by: user?.id,
-            approved_at: new Date().toISOString()
+            acted_by: user?.id,
+            acted_at: new Date().toISOString()
           })
           .eq('id', requestId);
 
@@ -284,9 +284,8 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
           .from('admin_approval_requests')
           .update({
             status: 'rejected',
-            rejected_by: user?.id,
-            rejected_at: new Date().toISOString(),
-            rejection_reason: rejectionReason
+            acted_by: user?.id,
+            acted_at: new Date().toISOString()
           })
           .eq('id', requestId);
 
