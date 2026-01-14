@@ -50,7 +50,6 @@ export function PaymentsSection() {
             )
           )
         `)
-        .gt("amount", 0) // Only show payments with actual amounts paid
         .order("created_at", { ascending: false });
       
       if (error) throw error;
