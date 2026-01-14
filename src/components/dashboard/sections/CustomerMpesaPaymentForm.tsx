@@ -66,12 +66,13 @@ export function CustomerMpesaPaymentForm() {
       
       if (deliveryIds.length === 0) return [];
 
-      // Only exclude deliveries that have been fully paid
+      // Only exclude deliveries that have been fully paid with actual amounts
       const { data: existingPayments } = await supabase
         .from("payments")
-        .select("delivery_id, status")
+        .select("delivery_id, status, amount")
         .in("delivery_id", deliveryIds)
-        .eq("status", "paid");
+        .eq("status", "paid")
+        .gt("amount", 0);
 
       // Filter out deliveries that already have a paid or pending payment
       const paidDeliveryIds = new Set(existingPayments?.map(p => p.delivery_id) || []);

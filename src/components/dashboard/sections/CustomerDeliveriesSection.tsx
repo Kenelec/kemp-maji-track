@@ -26,6 +26,7 @@ interface DeliveryWithItems {
   created_at: string;
   driver_id: string | null;
   drivers?: { id: string; name: string; phone: string | null } | null;
+  driverInfo?: { id: string; name: string; phone: string | null } | null;
   delivery_items?: Array<{
     product_name: string;
     quantity: number;
@@ -325,7 +326,7 @@ export function CustomerDeliveriesSection() {
                           KSh {Number(delivery.total_amount).toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          {delivery.drivers?.name || "-"}
+                          {delivery.driverInfo?.name || delivery.drivers?.name || "-"}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
