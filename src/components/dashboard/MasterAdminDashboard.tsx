@@ -487,7 +487,7 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {deliveryQueries.length === 0 ? (
+                    {deliveryQueries.filter(q => q.status === 'pending' || q.status === 'open').length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">
                         No pending customer queries
                       </div>

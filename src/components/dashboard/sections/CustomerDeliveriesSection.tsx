@@ -113,9 +113,9 @@ export function CustomerDeliveriesSection() {
             })
           );
 
-          // If no driver from join, fetch separately
-          let driverInfo = delivery.drivers;
-          if (!driverInfo && delivery.driver_id) {
+          // Always fetch driver separately since FK join may not work
+          let driverInfo = null;
+          if (delivery.driver_id) {
             const { data: driver } = await supabase
               .from("drivers")
               .select("id, name, phone")
