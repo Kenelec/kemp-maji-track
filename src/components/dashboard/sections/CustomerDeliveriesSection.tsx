@@ -103,11 +103,14 @@ export function CustomerDeliveriesSection() {
           const itemsWithDescriptions = await Promise.all(
             (items || []).map(async (item) => {
               if (item.product_id) {
-                const { data: product } = await supabase
+                const { data: product, error: productError } = await supabase
                   .from("products")
                   .select("description")
                   .eq("id", item.product_id)
                   .maybeSingle();
+                if (productError) {
+                  console.error('[CustomerDeliveries] Error fetching product description:', productError);
+                }
                 return { ...item, description: product?.description || null };
               }
               return { ...item, description: null };
@@ -117,11 +120,14 @@ export function CustomerDeliveriesSection() {
           // Always fetch driver separately since FK join may not work
           let driverInfo = null;
           if (delivery.driver_id) {
-            const { data: driver } = await supabase
+            const { data: driver, error: driverError } = await supabase
               .from("drivers")
               .select("id, name, phone")
               .eq("id", delivery.driver_id)
               .maybeSingle();
+            if (driverError) {
+              console.error('[CustomerDeliveries] Error fetching driver:', driverError);
+            }
             driverInfo = driver;
           }
           
