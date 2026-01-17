@@ -16,7 +16,8 @@ import {
   XCircle,
   Clock,
   Navigation,
-  MapPin
+  MapPin,
+  Eye
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +32,7 @@ import { BulkExportSection } from "./sections/BulkExportSection";
 import { DriversSection } from "./sections/DriversSection";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 import { NotificationCenter } from "./NotificationCenter";
+import { QueryDeliveryDialog } from "./sections/QueryDeliveryDialog";
 
 interface ApprovalRequest {
   id: string;
@@ -93,6 +95,8 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
   const [deliveryQueries, setDeliveryQueries] = useState<DeliveryQuery[]>([]);
   const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedQuery, setSelectedQuery] = useState<DeliveryQuery | null>(null);
+  const [queryDialogOpen, setQueryDialogOpen] = useState(false);
   
   // Enable real-time payment notifications
   usePaymentNotifications(user?.id);
@@ -538,19 +542,14 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                               <div className="flex space-x-2 mt-3">
                                 <Button 
                                   size="sm" 
-                                  className="bg-green-600 hover:bg-green-700"
-                                  onClick={() => approveRequest(query.id, 'delivery_queries', query.id, null)}
-                                >
-                                  <CheckCircle2 className="w-4 h-4 mr-1" />
-                                  Resolve
-                                </Button>
-                                <Button 
-                                  size="sm" 
                                   variant="outline"
-                                  onClick={() => rejectRequest(query.id, 'delivery_queries', query.id, 'Query rejected')}
+                                  onClick={() => {
+                                    setSelectedQuery(query);
+                                    setQueryDialogOpen(true);
+                                  }}
                                 >
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                  Reject
+                                  <Eye className="w-4 h-4 mr-1" />
+                                  View & Resolve
                                 </Button>
                               </div>
                             )}
@@ -562,6 +561,19 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
                 </Card>
               </div>
             )}
+
+            {/* Query Delivery Dialog */}
+            <QueryDeliveryDialog
+              query={selectedQuery}
+              open={queryDialogOpen}
+              onOpenChange={setQueryDialogOpen}
+              onResolve={async (queryId, resolutionNote) => {
+                await approveRequest(queryId, 'delivery_queries', queryId, null);
+              }}
+              onReject={async (queryId, rejectionReason) => {
+                await rejectRequest(queryId, 'delivery_queries', queryId, rejectionReason);
+              }}
+            />
           </div>
         );
       case "dashboard":

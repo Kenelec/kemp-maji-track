@@ -101,16 +101,29 @@ export function PaymentsSection() {
   };
 
   const updatePaymentStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, deliveryId }: { id: string; status: string; deliveryId?: string | null }) => {
       const { error } = await supabase
         .from("payments")
         .update({ status })
         .eq("id", id);
       
       if (error) throw error;
+      
+      // Sync delivery payment_status when payment is marked as paid
+      if (status === 'paid' && deliveryId) {
+        const { error: deliveryError } = await supabase
+          .from("deliveries")
+          .update({ payment_status: 'paid' })
+          .eq("id", deliveryId);
+        
+        if (deliveryError) {
+          console.error('Failed to sync delivery payment status:', deliveryError);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       toast({
         title: "Payment updated",
         description: "Payment status has been updated successfully.",
@@ -291,7 +304,11 @@ export function PaymentsSection() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => updatePaymentStatus.mutate({ id: payment.id, status: "paid" })}
+                              onClick={() => updatePaymentStatus.mutate({ 
+                                id: payment.id, 
+                                status: "paid", 
+                                deliveryId: payment.delivery_id 
+                              })}
                             >
                               <CheckCircle className="w-4 h-4 mr-1" />
                               Mark Paid
