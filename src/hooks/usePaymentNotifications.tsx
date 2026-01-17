@@ -8,7 +8,8 @@ export const usePaymentNotifications = (userId: string | undefined) => {
 
     console.log('Setting up payment notifications for user:', userId);
 
-    // Subscribe to deliveries table changes where payment_status becomes 'paid'
+    // Subscribe to ALL deliveries table updates and filter in handler
+    // This catches both 'paid' and 'partial' payment statuses
     const channel = supabase
       .channel('payment-updates')
       .on(
@@ -17,44 +18,53 @@ export const usePaymentNotifications = (userId: string | undefined) => {
           event: 'UPDATE',
           schema: 'public',
           table: 'deliveries',
-          filter: `payment_status=eq.paid`
         },
         async (payload) => {
-          console.log('Payment update received:', payload);
+          const newPaymentStatus = (payload.new as any).payment_status;
+          const oldPaymentStatus = (payload.old as any)?.payment_status;
+          
+          // Only notify if payment status changed to 'paid' or 'partial'
+          if ((newPaymentStatus === 'paid' && oldPaymentStatus !== 'paid') ||
+              (newPaymentStatus === 'partial' && oldPaymentStatus !== 'partial')) {
+            
+            console.log('Payment update received:', payload);
 
-          // Fetch customer details for the notification
-          const { data: delivery } = await supabase
-            .from('deliveries')
-            .select(`
-              customer_id,
-              total_amount,
-              mpesa_transaction_id,
-              customers!inner (
-                customer_name
-              )
-            `)
-            .eq('id', payload.new.id)
-            .single();
+            // Fetch customer details for the notification
+            const { data: delivery } = await supabase
+              .from('deliveries')
+              .select(`
+                customer_id,
+                total_amount,
+                mpesa_transaction_id,
+                customers!inner (
+                  customer_name
+                )
+              `)
+              .eq('id', (payload.new as any).id)
+              .single();
 
-          if (delivery) {
-            const customer = Array.isArray(delivery.customers) 
-              ? delivery.customers[0] 
-              : delivery.customers;
+            if (delivery) {
+              const customer = Array.isArray(delivery.customers) 
+                ? delivery.customers[0] 
+                : delivery.customers;
 
-            toast({
-              title: "💰 Payment Received!",
-              description: `${customer.customer_name} paid KES ${delivery.total_amount} via M-Pesa${delivery.mpesa_transaction_id ? ` (Ref: ${delivery.mpesa_transaction_id})` : ''}`,
-              duration: 10000,
-            });
+              const paymentType = newPaymentStatus === 'partial' ? 'submitted M-Pesa payment' : 'paid';
+              
+              toast({
+                title: "💰 Payment Received!",
+                description: `${customer.customer_name} ${paymentType} KES ${delivery.total_amount}${delivery.mpesa_transaction_id ? ` (Ref: ${delivery.mpesa_transaction_id})` : ''}`,
+                duration: 10000,
+              });
 
-            // Optional: Play notification sound
-            try {
-              const audio = new Audio('/notification-sound.mp3');
-              audio.volume = 0.5;
-              await audio.play();
-            } catch (error) {
-              // Ignore audio errors (browser autoplay policy, missing file, etc.)
-              console.log('Could not play notification sound:', error);
+              // Optional: Play notification sound
+              try {
+                const audio = new Audio('/notification-sound.mp3');
+                audio.volume = 0.5;
+                await audio.play();
+              } catch (error) {
+                // Ignore audio errors (browser autoplay policy, missing file, etc.)
+                console.log('Could not play notification sound:', error);
+              }
             }
           }
         }

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { DeliveryFormDialog } from "../forms/DeliveryFormDialog";
@@ -60,6 +60,14 @@ export function DeliveriesSection() {
 
   const getConfirmationStatus = (delivery: any) => {
     const hasQuery = delivery.delivery_queries && delivery.delivery_queries.length > 0;
+    
+    // Check payment status first - highest priority
+    if (delivery.payment_status === 'paid') {
+      return { label: "Paid", color: "bg-green-100 text-green-800", icon: CheckCircle };
+    }
+    if (delivery.payment_status === 'partial') {
+      return { label: "Partial Payment", color: "bg-blue-100 text-blue-800", icon: CreditCard };
+    }
     
     if (delivery.discrepancy_flag || hasQuery) {
       return { label: "Issue", color: "bg-red-100 text-red-800", icon: AlertCircle };

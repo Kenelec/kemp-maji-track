@@ -138,6 +138,7 @@ export function CustomerDeliveriesSection() {
           return { 
             ...delivery, 
             drivers: driverInfo,
+            driverInfo: driverInfo,
             delivery_items: itemsWithDescriptions,
             hasOpenQuery: latestQuery && (latestQuery.status === 'pending' || latestQuery.status === 'open'),
             latestQuery

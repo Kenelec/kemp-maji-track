@@ -126,8 +126,10 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
         `)
         .order('created_at', { ascending: false });
 
+      console.log('[MasterAdmin] Delivery queries fetched:', queriesData?.length || 0, 'queries');
+      console.log('[MasterAdmin] Pending/open queries:', queriesData?.filter(q => q.status === 'pending' || q.status === 'open').length || 0);
       if (queriesError) {
-        console.error('Error fetching delivery queries:', queriesError);
+        console.error('[MasterAdmin] Error fetching delivery queries:', queriesError);
       }
 
       // Set data even if some fetches failed
