@@ -57,11 +57,11 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
   const [discrepancyDelivery, setDiscrepancyDelivery] = useState<LastDeliveryData | null>(null);
   const queryClient = useQueryClient();
 
-  // ✅ PERMANENT FIX: Fetch last delivery AND check the actual payments table
+  // Fetch last delivery WITH payment status from payments table
   const { data: lastDelivery } = useQuery({
     queryKey: ["last-delivery"],
     queryFn: async () => {
-      // 1. Get the last delivery details
+      // Get last delivery
       const { data: deliveryData, error: deliveryError } = await supabase
         .from("deliveries")
         .select("id, delivery_date, total_amount, qty, customer_confirmed, confirmed_at, confirmation_deadline, auto_confirmed")
@@ -72,7 +72,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
       if (deliveryError) throw deliveryError;
       if (!deliveryData) return null;
 
-      // 2. Check the payments table to see if this specific delivery is actually paid
+      // Check if payment exists for this delivery
       const { data: paymentData } = await supabase
         .from("payments")
         .select("status, amount")
@@ -80,10 +80,10 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
         .in("status", ["paid", "completed"])
         .maybeSingle();
 
-      // 3. Determine if it is paid based on the payment record
+      // Determine payment status
       const isPaid = paymentData && (paymentData.status === 'paid' || paymentData.status === 'completed');
 
-      // 4. Get delivery items
+      // Get delivery items
       const { data: items } = await supabase
         .from("delivery_items")
         .select("product_name, quantity, unit_price, total_price")
@@ -92,7 +92,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
       return { 
         ...deliveryData, 
         delivery_items: items || [],
-        is_paid: isPaid // ✅ Add this flag
+        is_paid: isPaid
       } as LastDeliveryData & { is_paid: boolean };
     },
   });
@@ -109,19 +109,20 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     },
   });
 
-  const { data: pendingPayments } = useQuery({
-  queryKey: ["customer-pending-payments"],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("payments")
-      .select("*, deliveries(total_amount)")
-      .in("status", ["pending", "overdue"])
-      .gt("amount", 0); // ✅ FIXED: Only include payments with amount > 0
-    if (error) throw error;
-    return data || [];
-  },
-});
+  // ✅ FIXED: Fetch unpaid deliveries to calculate outstanding balance
+  const { data: unpaidDeliveries } = useQuery({
+    queryKey: ["customer-unpaid-deliveries"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("deliveries")
+        .select("id, total_amount, delivery_date")
+        .eq("payment_status", "unpaid");
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
+  // Fetch paid payments count
   const { data: paidPaymentsCount } = useQuery({
     queryKey: ["customer-paid-payments-count"],
     queryFn: async () => {
@@ -134,13 +135,12 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     },
   });
 
-  // Calculate outstanding balance properly
-  const totalOutstanding = pendingPayments?.reduce((sum, p) => {
-    const deliveryTotal = (p.deliveries as any)?.total_amount || 0;
-    const paidAmount = p.amount || 0;
-    const balance = deliveryTotal - paidAmount;
-    return sum + (balance > 0 ? balance : 0);
+  // ✅ FIXED: Calculate outstanding balance from unpaid deliveries
+  const totalOutstanding = unpaidDeliveries?.reduce((sum, d) => {
+    return sum + Number(d.total_amount || 0);
   }, 0) || 0;
+
+  const unpaidCount = unpaidDeliveries?.length || 0;
 
   // Confirm delivery mutation
   const confirmDeliveryMutation = useMutation({
@@ -160,6 +160,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
         description: "Thank you for confirming your delivery.",
       });
       queryClient.invalidateQueries({ queryKey: ["last-delivery"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-unpaid-deliveries"] });
     },
     onError: () => {
       toast({
@@ -176,22 +177,21 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     return isBefore(new Date(), new Date(delivery.confirmation_deadline));
   };
 
-  // ✅ PERMANENT FIX: Use the is_paid flag we created
   const getConfirmationStatus = (delivery: LastDeliveryData & { is_paid: boolean }) => {
-  // ✅ Check if delivery.payment_status is 'paid'
-  if ((delivery as any).payment_status === 'paid') {
-    return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
-  }
-  
-  // Check if payment exists in payments table
-  if (delivery.is_paid) {
-    return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
-  }
-  
-  // Then check confirmation status
-  if (delivery.customer_confirmed) {
-    return { label: "Confirmed (Payment Due)", icon: CheckCircle, color: "text-yellow-600" };
-  }
+    // Check if delivery.payment_status is 'paid'
+    if ((delivery as any).payment_status === 'paid') {
+      return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
+    }
+    
+    // Check if payment exists in payments table
+    if (delivery.is_paid) {
+      return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
+    }
+    
+    // Then check confirmation status
+    if (delivery.customer_confirmed) {
+      return { label: "Confirmed (Payment Due)", icon: CheckCircle, color: "text-yellow-600" };
+    }
     if (delivery.auto_confirmed) {
       return { label: "Auto-confirmed (Payment Due)", icon: Clock, color: "text-muted-foreground" };
     }
@@ -414,7 +414,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                 </Card>
               </div>
 
-              {/* Outstanding Payments Card - Only show if there's an outstanding balance */}
+              {/* ✅ FIXED: Outstanding Payments Card - Show if there are unpaid deliveries */}
               {totalOutstanding > 0 && (
                 <Card className="border-destructive/50">
                   <CardHeader className="pb-2">
@@ -430,7 +430,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                           KSh {totalOutstanding.toLocaleString()}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {pendingPayments?.length || 0} pending payment{(pendingPayments?.length || 0) !== 1 ? "s" : ""}
+                          {unpaidCount} unpaid delivery{unpaidCount !== 1 ? "ies" : "y"}
                         </p>
                       </div>
                       <Button
@@ -445,7 +445,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                 </Card>
               )}
 
-              {/* Show "All Paid" message when there's no outstanding balance */}
+              {/* ✅ FIXED: Show "All Paid" message ONLY when there are no unpaid deliveries */}
               {totalOutstanding === 0 && lastDelivery && (
                 <Card className="border-green-500/50 bg-green-50">
                   <CardHeader className="pb-2">
@@ -490,6 +490,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
         onSuccess={() => {
           setDiscrepancyDelivery(null);
           queryClient.invalidateQueries({ queryKey: ["last-delivery"] });
+          queryClient.invalidateQueries({ queryKey: ["customer-unpaid-deliveries"] });
         }}
       />
     </div>
