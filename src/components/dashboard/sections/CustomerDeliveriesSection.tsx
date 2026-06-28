@@ -203,13 +203,16 @@ export function CustomerDeliveriesSection() {
   };
 
   const getConfirmationStatus = (delivery: DeliveryWithItems) => {
-    // ✅ Check payment status FIRST - highest priority
-    if (delivery.payment_status === 'paid') {
-      return { status: "paid", label: "Paid", icon: CheckCircle, color: "text-green-600" };
-    }
-    if (delivery.payment_status === 'partial') {
-      return { status: "partial", label: "Partial Payment", icon: CreditCard, color: "text-blue-600" };
-    }
+  // Check payment status FIRST - highest priority
+  if (delivery.payment_status === 'paid') {
+    return { status: "paid", label: "Paid", icon: CheckCircle, color: "text-green-600" };
+  }
+  if (delivery.payment_status === 'pending_verification') {
+    return { status: "pending_verification", label: "Payment Pending Verification", icon: Clock, color: "text-blue-600" };
+  }
+  if (delivery.payment_status === 'partial') {
+    return { status: "partial", label: "Partial Payment", icon: CreditCard, color: "text-blue-600" };
+  }
     
     // Then check confirmation status
     if (delivery.customer_confirmed) {
