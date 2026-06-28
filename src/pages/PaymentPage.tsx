@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface DeliveryData {
@@ -16,12 +16,21 @@ interface DeliveryData {
   };
 }
 
+interface PaymentData {
+  id: string;
+  amount: number;
+  status: string;
+  mpesa_receipt: string | null;
+  created_at: string;
+}
+
 const PaymentPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const { toast } = useToast();
 
   const [delivery, setDelivery] = useState<DeliveryData | null>(null);
+  const [existingPayment, setExistingPayment] = useState<PaymentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,21 +42,22 @@ const PaymentPage = () => {
       return;
     }
 
-    fetchDelivery();
+    fetchDeliveryAndPayment();
     
     // Poll for payment status updates every 5 seconds
     const interval = setInterval(() => {
-      if (delivery?.payment_status !== 'paid') {
-        fetchDelivery();
+      if (delivery?.payment_status !== 'paid' && !existingPayment) {
+        fetchDeliveryAndPayment();
       }
     }, 5000);
 
     return () => clearInterval(interval);
   }, [token]);
 
-  const fetchDelivery = async () => {
+  const fetchDeliveryAndPayment = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch delivery
+      const { data: deliveryData, error: deliveryError } = await supabase
         .from('deliveries')
         .select(`
           id,
@@ -61,9 +71,24 @@ const PaymentPage = () => {
         .eq('payment_link_token', token)
         .single();
 
-      if (error) throw error;
+      if (deliveryError) throw deliveryError;
       
-      setDelivery(data as DeliveryData);
+      setDelivery(deliveryData as DeliveryData);
+
+      // Check if payment already exists for this delivery
+      const { data: paymentData, error: paymentError } = await supabase
+        .from('payments')
+        .select('id, amount, status, mpesa_receipt, created_at')
+        .eq('delivery_id', deliveryData.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (paymentError) {
+        console.error('Error fetching payment:', paymentError);
+      } else if (paymentData && paymentData.length > 0) {
+        setExistingPayment(paymentData[0]);
+      }
+
       setLoading(false);
     } catch (err) {
       console.error('Error fetching delivery:', err);
@@ -73,6 +98,16 @@ const PaymentPage = () => {
   };
 
   const handlePayment = async () => {
+    // Double-check if payment already exists
+    if (existingPayment) {
+      toast({
+        title: 'Payment Already Exists',
+        description: 'A payment for this delivery has already been initiated. Please wait for it to complete.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setProcessing(true);
     
     try {
@@ -87,6 +122,9 @@ const PaymentPage = () => {
           title: 'Payment Request Sent',
           description: 'Please check your phone and enter your M-Pesa PIN to complete the payment.',
         });
+        
+        // Refresh payment status
+        await fetchDeliveryAndPayment();
       } else {
         throw new Error(data.error || 'Failed to initiate payment');
       }
@@ -132,6 +170,31 @@ const PaymentPage = () => {
             <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
             <CardTitle>Payment Completed</CardTitle>
             <CardDescription>This delivery has already been paid. Thank you!</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show message if payment already exists but not yet marked as paid
+  if (existingPayment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+            <CardTitle>Payment Already Initiated</CardTitle>
+            <CardDescription className="space-y-2">
+              <p>A payment for this delivery has already been initiated.</p>
+              <p className="text-sm text-muted-foreground">
+                Amount: KES {existingPayment.amount.toLocaleString()}<br />
+                Status: {existingPayment.status}<br />
+                {existingPayment.mpesa_receipt && `Receipt: ${existingPayment.mpesa_receipt}`}
+              </p>
+              <p className="text-sm text-muted-foreground mt-4">
+                Please wait for the payment to complete or contact support if you need assistance.
+              </p>
+            </CardDescription>
           </CardHeader>
         </Card>
       </div>
