@@ -29,11 +29,26 @@ interface PaymentWithDetails {
   }>;
 }
 
+interface UnpaidDelivery {
+  id: string;
+  delivery_date: string;
+  total_amount: number;
+  qty: number;
+  payment_status: string;
+  delivery_items?: Array<{
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
+}
+
 export function CustomerPaymentsSection() {
-  // Fetch customer's payments with delivery details
+  // ✅ FIXED: Fetch both unpaid deliveries AND payments
   const { data: paymentsData, isLoading } = useQuery({
     queryKey: ["customer-payments"],
     queryFn: async () => {
+      // 1. Fetch all payments with delivery details
       const { data: payments, error: paymentsError } = await supabase
         .from("payments")
         .select(`
@@ -48,7 +63,14 @@ export function CustomerPaymentsSection() {
 
       if (paymentsError) throw paymentsError;
 
-      // Fetch delivery items for each payment that has a delivery
+      // 2. ✅ Fetch unpaid deliveries that don't have payment records yet
+      const { data: unpaidDeliveries } = await supabase
+        .from("deliveries")
+        .select("id, delivery_date, total_amount, qty, payment_status")
+        .eq("payment_status", "unpaid")
+        .order("delivery_date", { ascending: false });
+
+      // 3. Fetch delivery items for payments
       const paymentsWithItems = await Promise.all(
         (payments || []).map(async (payment) => {
           if (payment.delivery_id) {
@@ -62,7 +84,37 @@ export function CustomerPaymentsSection() {
         })
       );
 
-      return paymentsWithItems as PaymentWithDetails[];
+      // 4. ✅ Fetch delivery items for unpaid deliveries
+      const unpaidDeliveriesWithItems = await Promise.all(
+        (unpaidDeliveries || []).map(async (delivery) => {
+          const { data: items } = await supabase
+            .from("delivery_items")
+            .select("product_name, quantity, unit_price, total_price")
+            .eq("delivery_id", delivery.id);
+          return { ...delivery, delivery_items: items || [] } as UnpaidDelivery;
+        })
+      );
+
+      // 5. ✅ Convert unpaid deliveries to payment-like objects
+      const unpaidAsPayments: PaymentWithDetails[] = unpaidDeliveriesWithItems.map(d => ({
+        id: `unpaid-${d.id}`,
+        amount: 0,
+        due_date: new Date(d.delivery_date).toISOString().split("T")[0],
+        status: "pending",
+        payment_method: "none",
+        mpesa_code: null,
+        created_at: new Date().toISOString(),
+        delivery_id: d.id,
+        deliveries: {
+          delivery_date: d.delivery_date,
+          total_amount: d.total_amount,
+          qty: d.qty,
+        },
+        delivery_items: d.delivery_items || [],
+      }));
+
+      // 6. ✅ Combine both: unpaid deliveries + existing payments
+      return [...unpaidAsPayments, ...paymentsWithItems] as PaymentWithDetails[];
     },
   });
 
@@ -85,12 +137,12 @@ export function CustomerPaymentsSection() {
     };
   });
 
-  // ✅ FIXED: Categorize payments correctly
-const pendingPayments = processedPayments.filter(
-  (p) => (p.status === "pending" || p.status === "overdue") && p.amount > 0
-);
-const creditPayments = processedPayments.filter((p) => p.derivedStatus === "credit");
-const paidPayments = processedPayments.filter((p) => p.status === "paid" && p.amount > 0);
+  // Categorize payments
+  const pendingPayments = processedPayments.filter(
+    (p) => p.status === "pending" || p.status === "overdue"
+  );
+  const creditPayments = processedPayments.filter((p) => p.derivedStatus === "credit");
+  const paidPayments = processedPayments.filter((p) => p.status === "paid");
 
   // Calculate totals
   const totalPending = pendingPayments.reduce((sum, p) => sum + Math.abs(p.difference), 0);
@@ -214,7 +266,7 @@ const paidPayments = processedPayments.filter((p) => p.status === "paid" && p.am
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <CheckCircle className="w-4 h-4" />
+              <CheckCircle className="w-4 w-4" />
               Completed
             </div>
             <div className="text-2xl font-bold text-secondary">
