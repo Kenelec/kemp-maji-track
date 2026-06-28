@@ -31,6 +31,7 @@ export function CustomerMpesaPaymentForm() {
   // Get current customer
   const { data: customer } = useQuery({
     queryKey: ["current-customer-for-payment"],
+    queryKey: ["current-customer-for-payment"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
@@ -164,51 +165,31 @@ export function CustomerMpesaPaymentForm() {
           .eq("delivery_id", delivery.id)
           .in("status", ["pending", "failed"]);
 
-        // Create payment record
-        const { error: paymentError } = await supabase
+        // ✅ FIXED: Since customer is submitting full amount, mark as paid immediately
+        const { error: insertError } = await supabase
           .from("payments")
           .insert({
             customer_id: customer.id,
             delivery_id: delivery.id,
             amount: delivery.total_amount,
             due_date: new Date().toISOString().split("T")[0],
-            status: "pending",
+            status: "paid", // ✅ Mark as paid since full amount is submitted
             payment_method: "mpesa",
             mpesa_code: code,
           });
 
-        if (paymentError) throw paymentError;
+        if (insertError) throw insertError;
 
-        // ✅ FIXED: If payment amount equals delivery total, mark as paid immediately
-const isFullPayment = delivery.total_amount > 0;
-const paymentRecordStatus = isFullPayment ? "paid" : "pending";
-const deliveryPaymentStatus = isFullPayment ? "paid" : "partial";
-
-// Create payment record with correct status
-const { error: paymentError } = await supabase
-  .from("payments")
-  .insert({
-    customer_id: customer.id,
-    delivery_id: delivery.id,
-    amount: delivery.total_amount,
-    due_date: new Date().toISOString().split("T")[0],
-    status: paymentRecordStatus,
-    payment_method: "mpesa",
-    mpesa_code: code,
-  });
-
-if (paymentError) throw paymentError;
-
-// Update delivery with correct status
-const { error: deliveryError } = await supabase
-  .from("deliveries")
-  .update({
-    payment_status: deliveryPaymentStatus,
-    mpesa_transaction_id: code,
-    customer_confirmed: true,
-    confirmed_at: new Date().toISOString(),
-  })
-  .eq("id", delivery.id);
+        // Update delivery - mark as paid
+        const { error: deliveryError } = await supabase
+          .from("deliveries")
+          .update({
+            payment_status: "paid", // ✅ Mark as paid
+            mpesa_transaction_id: code,
+            customer_confirmed: true,
+            confirmed_at: new Date().toISOString(),
+          })
+          .eq("id", delivery.id);
 
         if (deliveryError) throw deliveryError;
       }
@@ -216,7 +197,7 @@ const { error: deliveryError } = await supabase
     onSuccess: () => {
       toast({
         title: "Payment Submitted",
-        description: `Payment for ${selectedDeliveryIds.length} ${selectedDeliveryIds.length === 1 ? 'delivery' : 'deliveries'} submitted for verification.`,
+        description: `Payment for ${selectedDeliveryIds.length} ${selectedDeliveryIds.length === 1 ? 'delivery' : 'deliveries'} submitted successfully.`,
       });
       setMpesaCode("");
       setSelectedDeliveryIds([]);
@@ -224,6 +205,8 @@ const { error: deliveryError } = await supabase
       queryClient.invalidateQueries({ queryKey: ["pending-deliveries-for-payment"] });
       queryClient.invalidateQueries({ queryKey: ["customer-payments"] });
       queryClient.invalidateQueries({ queryKey: ["customer-deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["last-delivery"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-pending-payments"] });
     },
     onError: (error: Error) => {
       setValidationError(error.message);
