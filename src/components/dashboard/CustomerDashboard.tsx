@@ -38,7 +38,6 @@ interface LastDeliveryData {
   delivery_date: string;
   total_amount: number;
   qty: number;
-  payment_status: string; // ✅ ADDED: Track payment status
   customer_confirmed: boolean;
   confirmed_at: string | null;
   confirmation_deadline: string | null;
@@ -58,27 +57,43 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
   const [discrepancyDelivery, setDiscrepancyDelivery] = useState<LastDeliveryData | null>(null);
   const queryClient = useQueryClient();
 
-  // Fetch last delivery
+  // ✅ PERMANENT FIX: Fetch last delivery AND check the actual payments table
   const { data: lastDelivery } = useQuery({
     queryKey: ["last-delivery"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1. Get the last delivery details
+      const { data: deliveryData, error: deliveryError } = await supabase
         .from("deliveries")
-        .select("id, delivery_date, total_amount, qty, payment_status, customer_confirmed, confirmed_at, confirmation_deadline, auto_confirmed")
+        .select("id, delivery_date, total_amount, qty, customer_confirmed, confirmed_at, confirmation_deadline, auto_confirmed")
         .order("delivery_date", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (error) throw error;
-      if (!data) return null;
+      if (deliveryError) throw deliveryError;
+      if (!deliveryData) return null;
 
-      // Get delivery items
+      // 2. Check the payments table to see if this specific delivery is actually paid
+      const { data: paymentData } = await supabase
+        .from("payments")
+        .select("status, amount")
+        .eq("delivery_id", deliveryData.id)
+        .in("status", ["paid", "completed"])
+        .maybeSingle();
+
+      // 3. Determine if it is paid based on the payment record
+      const isPaid = paymentData && (paymentData.status === 'paid' || paymentData.status === 'completed');
+
+      // 4. Get delivery items
       const { data: items } = await supabase
         .from("delivery_items")
         .select("product_name, quantity, unit_price, total_price")
-        .eq("delivery_id", data.id);
+        .eq("delivery_id", deliveryData.id);
 
-      return { ...data, delivery_items: items || [] } as LastDeliveryData;
+      return { 
+        ...deliveryData, 
+        delivery_items: items || [],
+        is_paid: isPaid // ✅ Add this flag
+      } as LastDeliveryData & { is_paid: boolean };
     },
   });
 
@@ -112,7 +127,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
       const { count, error } = await supabase
         .from("payments")
         .select("*", { count: "exact", head: true })
-        .eq("status", "paid");
+        .in("status", ["paid", "completed"]);
       if (error) throw error;
       return count || 0;
     },
@@ -160,14 +175,11 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     return isBefore(new Date(), new Date(delivery.confirmation_deadline));
   };
 
-  // ✅ FIXED: Check payment status FIRST, then confirmation status
-  const getConfirmationStatus = (delivery: LastDeliveryData) => {
+  // ✅ PERMANENT FIX: Use the is_paid flag we created
+  const getConfirmationStatus = (delivery: LastDeliveryData & { is_paid: boolean }) => {
     // Check payment status FIRST - highest priority
-    if (delivery.payment_status === 'paid') {
+    if (delivery.is_paid) {
       return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
-    }
-    if (delivery.payment_status === 'partial') {
-      return { label: "Partial Payment", icon: CreditCard, color: "text-blue-600" };
     }
     
     // Then check confirmation status
@@ -396,7 +408,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                 </Card>
               </div>
 
-              {/* ✅ FIXED: Outstanding Payments Card - Only show if there's an outstanding balance */}
+              {/* Outstanding Payments Card - Only show if there's an outstanding balance */}
               {totalOutstanding > 0 && (
                 <Card className="border-destructive/50">
                   <CardHeader className="pb-2">
@@ -427,7 +439,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                 </Card>
               )}
 
-              {/* ✅ ADDED: Show "All Paid" message when there's no outstanding balance */}
+              {/* Show "All Paid" message when there's no outstanding balance */}
               {totalOutstanding === 0 && lastDelivery && (
                 <Card className="border-green-500/50 bg-green-50">
                   <CardHeader className="pb-2">
