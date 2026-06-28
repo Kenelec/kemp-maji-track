@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           setTimeout(async () => {
             try {
-              // ✅ STEP 1: Get role_id from users table
+              // STEP 1: Get role_id from users table
               const { data: userData, error: userError } = await supabase
                 .from('users')
                 .select('role_id')
@@ -42,10 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return;
               }
 
-              // ✅ STEP 2: Get the role name from 'user_roles' table (NOT 'users_roles')
+              // STEP 2: Get the role name from 'user_roles' table
               if (userData?.role_id) {
                 const { data: roleData, error: roleError } = await supabase
-                  .from('user_roles')  // ← FIXED: Changed from 'users_roles' to 'user_roles'
+                  .from('user_roles')
                   .select('name')
                   .eq('id', userData.role_id)
                   .single();
