@@ -179,16 +179,18 @@ export function CustomerMpesaPaymentForm() {
 
         if (paymentError) throw paymentError;
 
-        // Update delivery - use 'partial' status and auto-confirm
-        const { error: deliveryError } = await supabase
-          .from("deliveries")
-          .update({
-            payment_status: "partial",
-            mpesa_transaction_id: code,
-            customer_confirmed: true,
-            confirmed_at: new Date().toISOString(),
-          })
-          .eq("id", delivery.id);
+        // ✅ FIXED: Set payment_status based on whether it's full or partial payment
+const paymentStatus = delivery.total_amount > 0 ? "pending_verification" : "partial";
+
+const { error: deliveryError } = await supabase
+  .from("deliveries")
+  .update({
+    payment_status: paymentStatus,
+    mpesa_transaction_id: code,
+    customer_confirmed: true,
+    confirmed_at: new Date().toISOString(),
+  })
+  .eq("id", delivery.id);
 
         if (deliveryError) throw deliveryError;
       }
