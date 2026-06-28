@@ -75,11 +75,12 @@ const PaymentPage = () => {
       
       setDelivery(deliveryData as DeliveryData);
 
-      // Check if payment already exists for this delivery
+      // ✅ FIXED: Only check for COMPLETED payments, not pending/failed ones
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .select('id, amount, status, mpesa_receipt, created_at')
         .eq('delivery_id', deliveryData.id)
+        .in('status', ['paid', 'completed']) // ✅ Only check for successful payments
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -87,6 +88,8 @@ const PaymentPage = () => {
         console.error('Error fetching payment:', paymentError);
       } else if (paymentData && paymentData.length > 0) {
         setExistingPayment(paymentData[0]);
+      } else {
+        setExistingPayment(null); // ✅ Clear if no successful payment exists
       }
 
       setLoading(false);
@@ -98,11 +101,11 @@ const PaymentPage = () => {
   };
 
   const handlePayment = async () => {
-    // Double-check if payment already exists
-    if (existingPayment) {
+    // ✅ FIXED: Only block if there's a COMPLETED payment
+    if (existingPayment && (existingPayment.status === 'paid' || existingPayment.status === 'completed')) {
       toast({
-        title: 'Payment Already Exists',
-        description: 'A payment for this delivery has already been initiated. Please wait for it to complete.',
+        title: 'Payment Already Completed',
+        description: 'This delivery has already been paid successfully.',
         variant: 'destructive',
       });
       return;
@@ -111,6 +114,14 @@ const PaymentPage = () => {
     setProcessing(true);
     
     try {
+      // ✅ If there's a pending payment, delete it first so we can create a new one
+      if (existingPayment && existingPayment.status !== 'paid' && existingPayment.status !== 'completed') {
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('id', existingPayment.id);
+      }
+
       const { data, error } = await supabase.functions.invoke('initiate-mpesa-payment', {
         body: { payment_link_token: token }
       });
@@ -176,23 +187,19 @@ const PaymentPage = () => {
     );
   }
 
-  // Show message if payment already exists but not yet marked as paid
-  if (existingPayment) {
+  // ✅ FIXED: Only show "already initiated" if payment is completed
+  if (existingPayment && (existingPayment.status === 'paid' || existingPayment.status === 'completed')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-            <CardTitle>Payment Already Initiated</CardTitle>
+            <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
+            <CardTitle>Payment Already Completed</CardTitle>
             <CardDescription className="space-y-2">
-              <p>A payment for this delivery has already been initiated.</p>
+              <p>This delivery has already been paid successfully.</p>
               <p className="text-sm text-muted-foreground">
                 Amount: KES {existingPayment.amount.toLocaleString()}<br />
-                Status: {existingPayment.status}<br />
                 {existingPayment.mpesa_receipt && `Receipt: ${existingPayment.mpesa_receipt}`}
-              </p>
-              <p className="text-sm text-muted-foreground mt-4">
-                Please wait for the payment to complete or contact support if you need assistance.
               </p>
             </CardDescription>
           </CardHeader>
