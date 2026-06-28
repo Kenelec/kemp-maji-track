@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfWeek, endOfWeek, subWeeks, startOfMonth, startOfYear, isBefore, differenceInDays } from "date-fns";
-import { CheckCircle, AlertCircle, Clock, Truck, Package } from "lucide-react";
+import { CheckCircle, AlertCircle, Clock, Truck, Package, CreditCard } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { CustomerDeliveryDiscrepancyDialog } from "./CustomerDeliveryDiscrepancyDialog";
 
@@ -195,11 +195,20 @@ export function CustomerDeliveriesSection() {
   };
 
   const getConfirmationStatus = (delivery: DeliveryWithItems) => {
+    // ✅ FIXED: Check payment status FIRST - highest priority
+    if (delivery.payment_status === 'paid') {
+      return { status: "paid", label: "Paid", icon: CheckCircle, color: "text-green-600" };
+    }
+    if (delivery.payment_status === 'partial') {
+      return { status: "partial", label: "Partial Payment", icon: CreditCard, color: "text-blue-600" };
+    }
+    
+    // Then check confirmation status
     if (delivery.customer_confirmed) {
-      return { status: "confirmed", label: "Confirmed", icon: CheckCircle, color: "text-green-600" };
+      return { status: "confirmed", label: "Confirmed (Unpaid)", icon: CheckCircle, color: "text-yellow-600" };
     }
     if (delivery.auto_confirmed) {
-      return { status: "auto", label: "Auto-confirmed", icon: Clock, color: "text-muted-foreground" };
+      return { status: "auto", label: "Auto-confirmed (Unpaid)", icon: Clock, color: "text-muted-foreground" };
     }
     if (delivery.confirmation_deadline) {
       const daysLeft = differenceInDays(new Date(delivery.confirmation_deadline), new Date());
