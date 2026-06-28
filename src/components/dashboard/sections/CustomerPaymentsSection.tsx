@@ -85,12 +85,12 @@ export function CustomerPaymentsSection() {
     };
   });
 
-  // Categorize payments
-  const pendingPayments = processedPayments.filter(
-    (p) => p.status === "pending" || p.status === "overdue"
-  );
-  const creditPayments = processedPayments.filter((p) => p.derivedStatus === "credit");
-  const paidPayments = processedPayments.filter((p) => p.status === "paid");
+  // ✅ FIXED: Categorize payments correctly
+const pendingPayments = processedPayments.filter(
+  (p) => (p.status === "pending" || p.status === "overdue") && p.amount > 0
+);
+const creditPayments = processedPayments.filter((p) => p.derivedStatus === "credit");
+const paidPayments = processedPayments.filter((p) => p.status === "paid" && p.amount > 0);
 
   // Calculate totals
   const totalPending = pendingPayments.reduce((sum, p) => sum + Math.abs(p.difference), 0);
