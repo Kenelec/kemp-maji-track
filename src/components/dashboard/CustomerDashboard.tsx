@@ -38,6 +38,7 @@ interface LastDeliveryData {
   delivery_date: string;
   total_amount: number;
   qty: number;
+  payment_status: string; // ✅ ADDED: Track payment status
   customer_confirmed: boolean;
   confirmed_at: string | null;
   confirmation_deadline: string | null;
@@ -63,7 +64,7 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deliveries")
-        .select("id, delivery_date, total_amount, qty, customer_confirmed, confirmed_at, confirmation_deadline, auto_confirmed")
+        .select("id, delivery_date, total_amount, qty, payment_status, customer_confirmed, confirmed_at, confirmation_deadline, auto_confirmed")
         .order("delivery_date", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -159,17 +160,27 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
     return isBefore(new Date(), new Date(delivery.confirmation_deadline));
   };
 
+  // ✅ FIXED: Check payment status FIRST, then confirmation status
   const getConfirmationStatus = (delivery: LastDeliveryData) => {
+    // Check payment status FIRST - highest priority
+    if (delivery.payment_status === 'paid') {
+      return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
+    }
+    if (delivery.payment_status === 'partial') {
+      return { label: "Partial Payment", icon: CreditCard, color: "text-blue-600" };
+    }
+    
+    // Then check confirmation status
     if (delivery.customer_confirmed) {
-      return { label: "Confirmed", icon: CheckCircle, color: "text-green-600" };
+      return { label: "Confirmed (Payment Due)", icon: CheckCircle, color: "text-yellow-600" };
     }
     if (delivery.auto_confirmed) {
-      return { label: "Auto-confirmed", icon: Clock, color: "text-muted-foreground" };
+      return { label: "Auto-confirmed (Payment Due)", icon: Clock, color: "text-muted-foreground" };
     }
     if (delivery.confirmation_deadline) {
       const daysLeft = differenceInDays(new Date(delivery.confirmation_deadline), new Date());
       if (daysLeft < 0) {
-        return { label: "Expired", icon: AlertCircle, color: "text-destructive" };
+        return { label: "Expired - Auto-confirmed", icon: AlertCircle, color: "text-destructive" };
       }
       return { label: `${daysLeft + 1}d left to confirm`, icon: Clock, color: "text-yellow-600" };
     }
@@ -385,34 +396,54 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
                 </Card>
               </div>
 
-              {/* Outstanding Payments Card */}
-              <Card className="border-destructive/50">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-destructive" />
-                    Outstanding Balance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-2xl font-bold text-destructive">
-                        KSh {totalOutstanding.toLocaleString()}
+              {/* ✅ FIXED: Outstanding Payments Card - Only show if there's an outstanding balance */}
+              {totalOutstanding > 0 && (
+                <Card className="border-destructive/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-destructive" />
+                      Outstanding Balance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="text-2xl font-bold text-destructive">
+                          KSh {totalOutstanding.toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {pendingPayments?.length || 0} pending payment{(pendingPayments?.length || 0) !== 1 ? "s" : ""}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {pendingPayments?.length || 0} pending payment{(pendingPayments?.length || 0) !== 1 ? "s" : ""}
-                      </p>
+                      <Button
+                        onClick={() => setActiveTab("payments")}
+                        className="bg-gradient-primary"
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Pay Now
+                      </Button>
                     </div>
-                    <Button
-                      onClick={() => setActiveTab("payments")}
-                      className="bg-gradient-primary"
-                    >
-                      <CreditCard className="w-4 h-4 mr-2" />
-                      Pay Now
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ✅ ADDED: Show "All Paid" message when there's no outstanding balance */}
+              {totalOutstanding === 0 && lastDelivery && (
+                <Card className="border-green-500/50 bg-green-50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      Payment Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2 text-green-700">
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="font-semibold">All deliveries are paid! Thank you.</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
