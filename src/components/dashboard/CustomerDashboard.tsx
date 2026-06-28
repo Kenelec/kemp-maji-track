@@ -178,15 +178,20 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
 
   // ✅ PERMANENT FIX: Use the is_paid flag we created
   const getConfirmationStatus = (delivery: LastDeliveryData & { is_paid: boolean }) => {
-    // Check payment status FIRST - highest priority
-    if (delivery.is_paid) {
-      return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
-    }
-    
-    // Then check confirmation status
-    if (delivery.customer_confirmed) {
-      return { label: "Confirmed (Payment Due)", icon: CheckCircle, color: "text-yellow-600" };
-    }
+  // ✅ Check if delivery.payment_status is 'paid'
+  if ((delivery as any).payment_status === 'paid') {
+    return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
+  }
+  
+  // Check if payment exists in payments table
+  if (delivery.is_paid) {
+    return { label: "Paid", icon: CheckCircle, color: "text-green-600" };
+  }
+  
+  // Then check confirmation status
+  if (delivery.customer_confirmed) {
+    return { label: "Confirmed (Payment Due)", icon: CheckCircle, color: "text-yellow-600" };
+  }
     if (delivery.auto_confirmed) {
       return { label: "Auto-confirmed (Payment Due)", icon: Clock, color: "text-muted-foreground" };
     }
