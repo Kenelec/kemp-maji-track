@@ -42,10 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return;
               }
 
-              // ✅ STEP 2: If we have role_id, get the role name
+              // ✅ STEP 2: Get the role name from 'user_roles' table (NOT 'users_roles')
               if (userData?.role_id) {
                 const { data: roleData, error: roleError } = await supabase
-                  .from('users_roles')
+                  .from('user_roles')  // ← FIXED: Changed from 'users_roles' to 'user_roles'
                   .select('name')
                   .eq('id', userData.role_id)
                   .single();
