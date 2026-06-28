@@ -45,13 +45,13 @@ export function CustomerMpesaPaymentForm() {
     },
   });
 
-  // Fetch pending deliveries - only show truly unpaid deliveries without existing payments
+  // Fetch pending deliveries - only show truly unpaid deliveries
   const { data: pendingDeliveries, isLoading } = useQuery({
     queryKey: ["pending-deliveries-for-payment", customer?.id],
     queryFn: async () => {
       if (!customer?.id) return [];
       
-      // Fetch deliveries that are unpaid only
+      // Fetch deliveries that are unpaid
       const { data, error } = await supabase
         .from("deliveries")
         .select("id, delivery_date, total_amount, payment_status")
@@ -61,21 +61,18 @@ export function CustomerMpesaPaymentForm() {
       
       if (error) throw error;
 
-      // Check for existing payment records for these deliveries
       const deliveryIds = (data || []).map(d => d.id);
       
       if (deliveryIds.length === 0) return [];
 
-      // Only exclude deliveries that have been fully paid with actual amounts
-      const { data: existingPayments } = await supabase
+      // ✅ FIXED: Only exclude deliveries that have a COMPLETED payment
+      const { data: completedPayments } = await supabase
         .from("payments")
-        .select("delivery_id, status, amount")
+        .select("delivery_id")
         .in("delivery_id", deliveryIds)
-        .eq("status", "paid")
-        .gt("amount", 0);
+        .eq("status", "paid");
 
-      // Filter out deliveries that already have a paid or pending payment
-      const paidDeliveryIds = new Set(existingPayments?.map(p => p.delivery_id) || []);
+      const paidDeliveryIds = new Set(completedPayments?.map(p => p.delivery_id) || []);
       const unpaidDeliveries = (data || []).filter(d => !paidDeliveryIds.has(d.id));
 
       // Fetch delivery items for each
@@ -148,17 +145,24 @@ export function CustomerMpesaPaymentForm() {
 
       // Create payment records for each selected delivery
       for (const delivery of selectedDeliveries) {
-        // First, check if a payment already exists for this delivery
-        const { data: existingPayment } = await supabase
+        // ✅ FIXED: Only check for COMPLETED payments, not pending ones
+        const { data: completedPayment } = await supabase
           .from("payments")
           .select("id")
           .eq("delivery_id", delivery.id)
-          .in("status", ["paid", "pending"])
+          .eq("status", "paid")
           .maybeSingle();
 
-        if (existingPayment) {
-          throw new Error(`A payment already exists for delivery on ${format(new Date(delivery.delivery_date), "MMM d, yyyy")}`);
+        if (completedPayment) {
+          throw new Error(`This delivery has already been paid on ${format(new Date(delivery.delivery_date), "MMM d, yyyy")}`);
         }
+
+        // ✅ FIXED: Delete any existing pending/failed payments before creating new one
+        await supabase
+          .from("payments")
+          .delete()
+          .eq("delivery_id", delivery.id)
+          .in("status", ["pending", "failed"]);
 
         // Create payment record
         const { error: paymentError } = await supabase
@@ -175,7 +179,7 @@ export function CustomerMpesaPaymentForm() {
 
         if (paymentError) throw paymentError;
 
-        // Update delivery - use 'partial' status (valid per constraint) and auto-confirm
+        // Update delivery - use 'partial' status and auto-confirm
         const { error: deliveryError } = await supabase
           .from("deliveries")
           .update({
