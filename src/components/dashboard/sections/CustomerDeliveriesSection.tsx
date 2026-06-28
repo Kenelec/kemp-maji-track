@@ -90,16 +90,24 @@ export function CustomerDeliveriesSection() {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Fetch delivery items for each delivery with product descriptions
+      // ✅ Fetch delivery items for each delivery
       const deliveriesWithItems = await Promise.all(
         (data || []).map(async (delivery) => {
-          // Fetch delivery items
-          const { data: items } = await supabase
+          // ✅ Fetch delivery items with ALL fields
+          const { data: items, error: itemsError } = await supabase
             .from("delivery_items")
-            .select("product_name, quantity, unit_price, total_price, product_id")
+            .select("*")
             .eq("delivery_id", delivery.id);
           
-          // Fetch product descriptions for each item
+          if (itemsError) {
+            console.error('[CustomerDeliveries] Error fetching items:', itemsError);
+          }
+
+          // ✅ DEBUG: Log what we got
+          console.log('🔍 Delivery ID:', delivery.id, 'Items found:', items?.length || 0);
+          console.log('📦 Items data:', items);
+          
+          // ✅ Fetch product descriptions for each item
           const itemsWithDescriptions = await Promise.all(
             (items || []).map(async (item) => {
               if (item.product_id) {
@@ -195,38 +203,28 @@ export function CustomerDeliveriesSection() {
   };
 
   const getConfirmationStatus = (delivery: DeliveryWithItems) => {
-    // ✅ DEBUG: Log what we're checking
-    console.log('🔍 Checking delivery:', delivery.id, 'Payment Status:', delivery.payment_status, 'Confirmed:', delivery.customer_confirmed);
-    
     // ✅ Check payment status FIRST - highest priority
     if (delivery.payment_status === 'paid') {
-      console.log('✅ Status: PAID');
       return { status: "paid", label: "Paid", icon: CheckCircle, color: "text-green-600" };
     }
     if (delivery.payment_status === 'partial') {
-      console.log('✅ Status: PARTIAL');
       return { status: "partial", label: "Partial Payment", icon: CreditCard, color: "text-blue-600" };
     }
     
     // Then check confirmation status
     if (delivery.customer_confirmed) {
-      console.log('✅ Status: CONFIRMED (Unpaid)');
       return { status: "confirmed", label: "Confirmed (Unpaid)", icon: CheckCircle, color: "text-yellow-600" };
     }
     if (delivery.auto_confirmed) {
-      console.log('✅ Status: AUTO-CONFIRMED (Unpaid)');
       return { status: "auto", label: "Auto-confirmed (Unpaid)", icon: Clock, color: "text-muted-foreground" };
     }
     if (delivery.confirmation_deadline) {
       const daysLeft = differenceInDays(new Date(delivery.confirmation_deadline), new Date());
       if (daysLeft < 0) {
-        console.log('✅ Status: EXPIRED');
         return { status: "expired", label: "Expired", icon: AlertCircle, color: "text-destructive" };
       }
-      console.log('✅ Status: PENDING (days left)');
       return { status: "pending", label: `${daysLeft + 1}d left`, icon: Clock, color: "text-yellow-600" };
     }
-    console.log('✅ Status: PENDING');
     return { status: "pending", label: "Pending", icon: Clock, color: "text-yellow-600" };
   };
 
@@ -325,15 +323,15 @@ export function CustomerDeliveriesSection() {
                             {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
                               delivery.delivery_items.map((item, idx) => (
                                 <div key={idx} className="text-sm">
-                                  <span className="font-medium">{item.product_name}</span>
+                                  <span className="font-medium">{item.product_name || 'Unknown Product'}</span>
                                   {item.description && (
                                     <span className="text-xs text-muted-foreground block">{item.description}</span>
                                   )}
-                                  <span className="text-muted-foreground text-xs">@ KSh {item.unit_price.toLocaleString()}</span>
+                                  <span className="text-muted-foreground text-xs">@ KSh {Number(item.unit_price || 0).toLocaleString()}</span>
                                 </div>
                               ))
                             ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
+                              <span className="text-muted-foreground text-sm">No products</span>
                             )}
                           </div>
                         </TableCell>
