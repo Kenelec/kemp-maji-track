@@ -164,7 +164,7 @@ export function CustomerDeliveriesSection() {
     },
     refetchOnMount: 'always',
     staleTime: 0,
-    refetchInterval: 5000,
+    refetchInterval: 30000, // 30 seconds instead of 5 seconds
   });
 
   const confirmDeliveryMutation = useMutation({
