@@ -203,13 +203,14 @@ export function CustomerDeliveriesSection() {
   };
 
   const getConfirmationStatus = (delivery: DeliveryWithItems) => {
-  // Check payment status FIRST - highest priority
+  // ✅ Check if payment_status is 'paid'
   if (delivery.payment_status === 'paid') {
     return { status: "paid", label: "Paid", icon: CheckCircle, color: "text-green-600" };
   }
-  if (delivery.payment_status === 'pending_verification') {
-    return { status: "pending_verification", label: "Payment Pending Verification", icon: Clock, color: "text-blue-600" };
-  }
+  
+  // ✅ Check if there's a completed payment in the payments table
+  // This is handled by the query that fetches delivery data
+  
   if (delivery.payment_status === 'partial') {
     return { status: "partial", label: "Partial Payment", icon: CreditCard, color: "text-blue-600" };
   }
