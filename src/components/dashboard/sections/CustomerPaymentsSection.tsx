@@ -44,7 +44,7 @@ interface UnpaidDelivery {
 }
 
 export function CustomerPaymentsSection() {
-  // ✅ FIXED: Fetch both unpaid deliveries AND payments
+  // ✅ FIXED: Fetch both unpaid deliveries AND payments, but avoid duplicates
   const { data: paymentsData, isLoading } = useQuery({
     queryKey: ["customer-payments"],
     queryFn: async () => {
@@ -63,14 +63,24 @@ export function CustomerPaymentsSection() {
 
       if (paymentsError) throw paymentsError;
 
-      // 2. ✅ Fetch unpaid deliveries that don't have payment records yet
+      // 2. Get list of delivery IDs that already have payment records
+      const deliveryIdsWithPayments = new Set(
+        (payments || []).map(p => p.delivery_id).filter(id => id !== null)
+      );
+
+      // 3. ✅ Fetch ONLY unpaid deliveries that DON'T have payment records yet
       const { data: unpaidDeliveries } = await supabase
         .from("deliveries")
         .select("id, delivery_date, total_amount, qty, payment_status")
         .eq("payment_status", "unpaid")
         .order("delivery_date", { ascending: false });
 
-      // 3. Fetch delivery items for payments
+      // 4. ✅ Filter out unpaid deliveries that already have payment records
+      const unpaidDeliveriesWithoutPayments = (unpaidDeliveries || []).filter(
+        d => !deliveryIdsWithPayments.has(d.id)
+      );
+
+      // 5. Fetch delivery items for payments
       const paymentsWithItems = await Promise.all(
         (payments || []).map(async (payment) => {
           if (payment.delivery_id) {
@@ -84,9 +94,9 @@ export function CustomerPaymentsSection() {
         })
       );
 
-      // 4. ✅ Fetch delivery items for unpaid deliveries
+      // 6. ✅ Fetch delivery items for unpaid deliveries (without duplicate payments)
       const unpaidDeliveriesWithItems = await Promise.all(
-        (unpaidDeliveries || []).map(async (delivery) => {
+        unpaidDeliveriesWithoutPayments.map(async (delivery) => {
           const { data: items } = await supabase
             .from("delivery_items")
             .select("product_name, quantity, unit_price, total_price")
@@ -95,7 +105,7 @@ export function CustomerPaymentsSection() {
         })
       );
 
-      // 5. ✅ Convert unpaid deliveries to payment-like objects
+      // 7. ✅ Convert unpaid deliveries to payment-like objects
       const unpaidAsPayments: PaymentWithDetails[] = unpaidDeliveriesWithItems.map(d => ({
         id: `unpaid-${d.id}`,
         amount: 0,
@@ -113,7 +123,7 @@ export function CustomerPaymentsSection() {
         delivery_items: d.delivery_items || [],
       }));
 
-      // 6. ✅ Combine both: unpaid deliveries + existing payments
+      // 8. ✅ Combine both: unpaid deliveries (without payments) + existing payments
       return [...unpaidAsPayments, ...paymentsWithItems] as PaymentWithDetails[];
     },
   });
@@ -266,7 +276,7 @@ export function CustomerPaymentsSection() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <CheckCircle className="w-4 w-4" />
+              <CheckCircle className="w-4 h-4" />
               Completed
             </div>
             <div className="text-2xl font-bold text-secondary">
