@@ -110,16 +110,17 @@ const CustomerDashboard = ({ onLogout }: CustomerDashboardProps) => {
   });
 
   const { data: pendingPayments } = useQuery({
-    queryKey: ["customer-pending-payments"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payments")
-        .select("*, deliveries(total_amount)")
-        .in("status", ["pending", "overdue"]);
-      if (error) throw error;
-      return data || [];
-    },
-  });
+  queryKey: ["customer-pending-payments"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*, deliveries(total_amount)")
+      .in("status", ["pending", "overdue"])
+      .gt("amount", 0); // ✅ FIXED: Only include payments with amount > 0
+    if (error) throw error;
+    return data || [];
+  },
+});
 
   const { data: paidPaymentsCount } = useQuery({
     queryKey: ["customer-paid-payments-count"],
