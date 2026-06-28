@@ -179,13 +179,31 @@ export function CustomerMpesaPaymentForm() {
 
         if (paymentError) throw paymentError;
 
-        // ✅ FIXED: Set payment_status based on whether it's full or partial payment
-const paymentStatus = delivery.total_amount > 0 ? "pending_verification" : "partial";
+        // ✅ FIXED: If payment amount equals delivery total, mark as paid immediately
+const isFullPayment = delivery.total_amount > 0;
+const paymentRecordStatus = isFullPayment ? "paid" : "pending";
+const deliveryPaymentStatus = isFullPayment ? "paid" : "partial";
 
+// Create payment record with correct status
+const { error: paymentError } = await supabase
+  .from("payments")
+  .insert({
+    customer_id: customer.id,
+    delivery_id: delivery.id,
+    amount: delivery.total_amount,
+    due_date: new Date().toISOString().split("T")[0],
+    status: paymentRecordStatus,
+    payment_method: "mpesa",
+    mpesa_code: code,
+  });
+
+if (paymentError) throw paymentError;
+
+// Update delivery with correct status
 const { error: deliveryError } = await supabase
   .from("deliveries")
   .update({
-    payment_status: paymentStatus,
+    payment_status: deliveryPaymentStatus,
     mpesa_transaction_id: code,
     customer_confirmed: true,
     confirmed_at: new Date().toISOString(),
