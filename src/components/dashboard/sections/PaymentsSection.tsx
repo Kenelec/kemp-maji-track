@@ -1,372 +1,206 @@
-import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle, Pencil, Trash2, Upload } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { PaymentFormDialog } from "../forms/PaymentFormDialog";
-import { ExcelUploadDialog } from "../ExcelUploadDialog";
-import { format } from "date-fns";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { PaymentForm } from '../forms/PaymentForm';
+import { Edit, Plus, CreditCard, Calendar } from 'lucide-react';
 
-export function PaymentsSection() {
-  const { toast } = useToast();
-  const { userRole } = useAuth();
-  const isMasterAdmin = userRole === 'MasterAdmin';
-  const queryClient = useQueryClient();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
-  const [editingPayment, setEditingPayment] = useState<any>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
+interface Payment {
+  id: string;
+  delivery_id: string;
+  amount: number;
+  payment_method: string;
+  mpesa_code: string;
+  due_date: string;
+  status: string;
+  created_at: string;
+  deliveries: {
+    total_amount: number;
+    customer_id: string;
+    delivery_date: string;
+  };
+  customers: {
+    customer_name: string;
+    phone: string;
+  };
+}
 
-  const { data: payments, isLoading } = useQuery({
-    queryKey: ["payments"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payments")
-        .select(`
-          *,
-          customers (customer_name),
-          deliveries (
-            total_amount,
-            delivery_date,
-            delivery_items (
-              product_name,
-              quantity
-            )
-          )
-        `)
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    },
-    refetchInterval: 5000,
-  });
+export const PaymentsSection = () => {
+  const { user } = useAuth();
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [sortField, setSortField] = useState<keyof Payment | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [loading, setLoading] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("payments")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payments"] });
-      toast({
-        title: "Payment deleted",
-        description: "Payment has been removed successfully.",
-      });
-      setDeleteDialogOpen(false);
-      setPaymentToDelete(null);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to delete payment: " + error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const fetchPayments = async () => {
+    setLoading(true);
+    
+    let query = supabase
+      .from('payments')
+      .select(`
+        *,
+        deliveries (total_amount, customer_id, delivery_date),
+        customers (customer_name, phone)
+      `);
 
-  const handleEdit = (payment: any) => {
-    setEditingPayment(payment);
-    setIsFormOpen(true);
+    // Apply sorting if field is selected
+    if (sortField) {
+      query = query.order(sortField, { ascending: sortOrder === 'asc' });
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching payments:', error);
+    } else {
+      setPayments(data || []);
+    }
+    
+    setLoading(false);
   };
 
-  const handleDelete = (id: string) => {
-    setPaymentToDelete(id);
-    setDeleteDialogOpen(true);
-  };
+  useEffect(() => {
+    fetchPayments();
+  }, [sortField, sortOrder]);
 
-  const confirmDelete = () => {
-    if (paymentToDelete) {
-      deleteMutation.mutate(paymentToDelete);
+  const handleSort = (field: keyof Payment) => {
+    if (sortField === field) {
+      // Toggle sort order if clicking same field
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Sort by new field in ascending order
+      setSortField(field);
+      setSortOrder('asc');
     }
   };
 
-  const updatePaymentStatus = useMutation({
-    mutationFn: async ({ id, status, deliveryId }: { id: string; status: string; deliveryId?: string | null }) => {
-      const { error } = await supabase
-        .from("payments")
-        .update({ status })
-        .eq("id", id);
-      
-      if (error) throw error;
-      
-      // Sync delivery payment_status when payment is marked as paid
-      if (status === 'paid' && deliveryId) {
-        const { error: deliveryError } = await supabase
-          .from("deliveries")
-          .update({ payment_status: 'paid' })
-          .eq("id", deliveryId);
-        
-        if (deliveryError) {
-          console.error('Failed to sync delivery payment status:', deliveryError);
-        }
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payments"] });
-      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
-      toast({
-        title: "Payment updated",
-        description: "Payment status has been updated successfully.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to update payment: " + error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const getStatusColor = (status: string) => {
-    if (status.includes('credit')) return "bg-blue-500/10 text-blue-500";
-    if (status.includes('pending')) return "bg-yellow-500/10 text-yellow-500";
-    if (status === 'paid') return "bg-green-500/10 text-green-500";
-    if (status === 'overdue') return "bg-red-500/10 text-red-500";
-    return "bg-gray-500/10 text-gray-500";
+  const getSortIcon = (field: keyof Payment) => {
+    if (sortField !== field) return '↕️';
+    return sortOrder === 'asc' ? '↑' : '↓';
   };
 
-  const derivedStatusById = useMemo(() => {
-    const map = new Map<string, { type: 'paid' | 'pending' | 'credit'; label: string }>();
-    if (!payments) return map;
+  const getPaymentStatusBadge = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return <Badge variant="secondary" className="bg-green-100 text-green-800">Paid</Badge>;
+      case 'pending':
+        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+      case 'overdue':
+        return <Badge variant="secondary" className="bg-red-100 text-red-800">Overdue</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
 
-    const groups = new Map<string, any[]>();
-    payments.forEach((p: any) => {
-      const key = p.delivery_id || `no-delivery-${p.id}`;
-      const arr = groups.get(key) || [];
-      arr.push(p);
-      groups.set(key, arr);
-    });
-
-    groups.forEach((arr) => {
-      arr.sort((a: any, b: any) => {
-        const at = new Date(a.created_at || a.due_date || 0).getTime();
-        const bt = new Date(b.created_at || b.due_date || 0).getTime();
-        if (at !== bt) return at - bt;
-        return String(a.id).localeCompare(String(b.id));
-      });
-
-      const deliveryTotal = arr[0]?.deliveries?.total_amount ? Number(arr[0].deliveries.total_amount) : 0;
-      let running = 0;
-      arr.forEach((p: any) => {
-        running += Number(p.amount || 0);
-        const diff = running - deliveryTotal;
-        let type: 'paid' | 'pending' | 'credit';
-        let label: string;
-        if (deliveryTotal === 0) {
-          // Fallback to stored status when no delivery is linked
-          type = (p.status === 'credit' || p.status === 'paid' || p.status === 'pending') ? p.status : 'paid';
-          label = type;
-        } else if (diff > 0) {
-          type = 'credit';
-          label = `${Math.abs(diff)} credit`;
-        } else if (diff < 0) {
-          type = 'pending';
-          label = `${Math.abs(diff)} pending`;
-        } else {
-          type = 'paid';
-          label = 'paid';
-        }
-        map.set(p.id, { type, label });
-      });
-    });
-
-    return map;
-  }, [payments]);
+  if (loading) {
+    return <div className="text-center py-8">Loading payments...</div>;
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Payments</h2>
-          <p className="text-muted-foreground">Track customer payments</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsExcelUploadOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import Excel
-          </Button>
-          <Button className="bg-gradient-primary" onClick={() => setIsFormOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Payment
-          </Button>
-        </div>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-foreground">Payments</h2>
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Payment
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create New Payment</DialogTitle>
+            </DialogHeader>
+            <PaymentForm onClose={() => setShowCreateDialog(false)} />
+          </DialogContent>
+        </Dialog>
       </div>
-      
+
       <Card>
         <CardHeader>
-          <CardTitle>Payment Records</CardTitle>
-          <CardDescription>Manage payment status and history</CardDescription>
+          <CardTitle>All Payments</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : !payments || payments.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No payments found. Add your first payment to get started.
-            </div>
-          ) : (
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Products</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead>Delivery Total</TableHead>
-                  <TableHead>Paid Amount</TableHead>
-                  <TableHead>Balance</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Payment Method</TableHead>
-                  <TableHead>M-Pesa Code</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('id')}
+                  >
+                    ID {getSortIcon('id')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('customers.customer_name')}
+                  >
+                    Customer {getSortIcon('customers.customer_name')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('amount')}
+                  >
+                    Amount {getSortIcon('amount')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('payment_method')}
+                  >
+                    Method {getSortIcon('payment_method')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('mpesa_code')}
+                  >
+                    M-Pesa Code {getSortIcon('mpesa_code')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('due_date')}
+                  >
+                    Due Date {getSortIcon('due_date')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('status')}
+                  >
+                    Status {getSortIcon('status')}
+                  </TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payments.map((payment) => {
-                  const derived = derivedStatusById.get(payment.id);
-                  const type = derived?.type || payment.status;
-                  const label = derived?.label || payment.status;
-                  
-                  return (
-                    <TableRow key={payment.id}>
-                      <TableCell className="font-medium">
-                        {payment.customers?.customer_name || "Unknown"}
-                      </TableCell>
-                      <TableCell>
-                        {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
-                          payment.deliveries.delivery_items.map((item: any, idx: number) => (
-                            <div key={idx}>{item.product_name}</div>
-                          ))
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
-                          payment.deliveries.delivery_items.map((item: any, idx: number) => (
-                            <div key={idx}>{item.quantity}</div>
-                          ))
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {payment.deliveries?.total_amount 
-                          ? `KSh ${Number(payment.deliveries.total_amount).toLocaleString()}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="font-semibold text-green-600">
-                        KSh {Number(payment.amount).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {payment.deliveries?.total_amount ? (
-                          <span className={Number(payment.deliveries.total_amount) - Number(payment.amount) > 0 
-                            ? "text-red-600" 
-                            : "text-green-600"
-                          }>
-                            KSh {(Number(payment.deliveries.total_amount) - Number(payment.amount)).toLocaleString()}
-                          </span>
-                        ) : "—"}
-                      </TableCell>
-                      <TableCell>{format(new Date(payment.due_date), "MMM dd, yyyy")}</TableCell>
-                      <TableCell className="capitalize">{payment.payment_method}</TableCell>
-                      <TableCell>{payment.mpesa_code || "—"}</TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(type)}>
-                          {label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {/* Only show Mark Paid button for pending payments - MasterAdmin only */}
-                          {isMasterAdmin && payment.status === "pending" && !label.includes('pending') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updatePaymentStatus.mutate({ 
-                                id: payment.id, 
-                                status: "paid", 
-                                deliveryId: payment.delivery_id 
-                              })}
-                            >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Mark Paid
-                            </Button>
-                          )}
-                          {isMasterAdmin && (
-                            <>
-                              <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {payments.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell className="font-medium">{payment.id}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{payment.customers?.customer_name || 'N/A'}</div>
+                      <div className="text-sm text-muted-foreground">{payment.customers?.phone || 'N/A'}</div>
+                    </TableCell>
+                    <TableCell>KES {payment.amount.toLocaleString()}</TableCell>
+                    <TableCell>{payment.payment_method}</TableCell>
+                    <TableCell>{payment.mpesa_code || 'N/A'}</TableCell>
+                    <TableCell>{new Date(payment.due_date).toLocaleDateString()}</TableCell>
+                    <TableCell>{getPaymentStatusBadge(payment.status)}</TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="outline">
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
-          )}
+          </div>
         </CardContent>
       </Card>
-
-      <PaymentFormDialog
-        open={isFormOpen}
-        onOpenChange={(open) => {
-          setIsFormOpen(open);
-          if (!open) setEditingPayment(null);
-        }}
-        editData={editingPayment}
-      />
-
-      <ExcelUploadDialog
-        open={isExcelUploadOpen}
-        onOpenChange={setIsExcelUploadOpen}
-        type="payments"
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["payments"] })}
-      />
-
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Payment</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this payment? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
-}
+};
