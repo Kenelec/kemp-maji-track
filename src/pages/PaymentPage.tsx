@@ -187,19 +187,19 @@ const PaymentPage = () => {
     );
   }
 
-  // ✅ FIXED: Only show "already initiated" if payment is completed
-  if (existingPayment && (existingPayment.status === 'paid' || existingPayment.status === 'completed')) {
+  // Show pending verification state
+  if (existingPayment && existingPayment.status === 'pending_verification') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <CardTitle>Payment Already Completed</CardTitle>
+            <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+            <CardTitle>Awaiting Verification</CardTitle>
             <CardDescription className="space-y-2">
-              <p>This delivery has already been paid successfully.</p>
+              <p>Your M-Pesa code has been submitted and is awaiting admin verification against the Safaricom SMS.</p>
               <p className="text-sm text-muted-foreground">
                 Amount: KES {existingPayment.amount.toLocaleString()}<br />
-                {existingPayment.mpesa_code && `Receipt: ${existingPayment.mpesa_code}`}
+                {existingPayment.mpesa_code && `Code: ${existingPayment.mpesa_code}`}
               </p>
             </CardDescription>
           </CardHeader>
@@ -207,6 +207,7 @@ const PaymentPage = () => {
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
