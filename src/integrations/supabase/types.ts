@@ -971,6 +971,7 @@ export type Database = {
       }
       generate_payment_token: { Args: never; Returns: string }
       get_auth_uid: { Args: never; Returns: string }
+      get_current_customer_id: { Args: never; Returns: string }
       get_user_role: { Args: { user_uuid: string }; Returns: string }
       mark_overdue_payments: { Args: never; Returns: undefined }
       user_can_view_delivery:

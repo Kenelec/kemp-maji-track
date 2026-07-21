@@ -20,7 +20,7 @@ interface PaymentData {
   id: string;
   amount: number;
   status: string;
-  mpesa_receipt: string | null;
+  mpesa_code: string | null;
   created_at: string;
 }
 
@@ -78,7 +78,7 @@ const PaymentPage = () => {
       // ✅ FIXED: Only check for COMPLETED payments, not pending/failed ones
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
-        .select('id, amount, status, mpesa_receipt, created_at')
+        .select('id, amount, status, mpesa_code, created_at')
         .eq('delivery_id', deliveryData.id)
         .in('status', ['paid', 'completed']) // ✅ Only check for successful payments
         .order('created_at', { ascending: false })
@@ -199,7 +199,7 @@ const PaymentPage = () => {
               <p>This delivery has already been paid successfully.</p>
               <p className="text-sm text-muted-foreground">
                 Amount: KES {existingPayment.amount.toLocaleString()}<br />
-                {existingPayment.mpesa_receipt && `Receipt: ${existingPayment.mpesa_receipt}`}
+                {existingPayment.mpesa_code && `Receipt: ${existingPayment.mpesa_code}`}
               </p>
             </CardDescription>
           </CardHeader>
