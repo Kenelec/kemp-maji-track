@@ -25,6 +25,28 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Verify shared webhook secret from Africa's Talking (configured in AT dashboard
+    // and stored as MPESA_WEBHOOK_SECRET). Reject unauthenticated callers.
+    const expectedSecret = Deno.env.get('MPESA_WEBHOOK_SECRET');
+    if (!expectedSecret) {
+      console.error('MPESA_WEBHOOK_SECRET not configured');
+      return new Response(
+        JSON.stringify({ error: 'Server not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const providedSecret =
+      req.headers.get('x-webhook-secret') ??
+      req.headers.get('x-africastalking-signature') ??
+      '';
+    if (providedSecret !== expectedSecret) {
+      console.warn('Rejected mpesa-webhook call: invalid or missing secret');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -53,6 +75,35 @@ Deno.serve(async (req) => {
     const deliveryId = callback.requestMetadata.delivery_id;
 
     if (callback.status === 'Success') {
+      // Confirm a matching in-flight (pending) payment exists for this delivery
+      // before flipping status. This blocks replay / forgery of arbitrary IDs.
+      const { data: pendingPayment, error: pendingErr } = await supabase
+        .from('payments')
+        .select('id, amount, status')
+        .eq('delivery_id', deliveryId)
+        .eq('method', 'mpesa')
+        .in('status', ['pending', 'processing'])
+        .maybeSingle();
+
+      if (pendingErr || !pendingPayment) {
+        console.warn('No matching pending mpesa payment for delivery', deliveryId);
+        return new Response(
+          JSON.stringify({ error: 'No matching pending payment' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (callback.amount && Number(callback.amount) !== Number(pendingPayment.amount)) {
+        console.warn('Callback amount mismatch', {
+          expected: pendingPayment.amount,
+          received: callback.amount,
+        });
+        return new Response(
+          JSON.stringify({ error: 'Amount mismatch' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Fetch delivery with customer details first
       const { data: delivery, error: fetchError } = await supabase
         .from('deliveries')
