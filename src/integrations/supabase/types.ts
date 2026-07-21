@@ -606,6 +606,53 @@ export type Database = {
         }
         Relationships: []
       }
+      mpesa_sms_inbox: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          matched_payment_id: string | null
+          message_text: string | null
+          mpesa_code: string
+          received_at: string
+          sender_name: string | null
+          sender_phone: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          matched_payment_id?: string | null
+          message_text?: string | null
+          mpesa_code: string
+          received_at?: string
+          sender_name?: string | null
+          sender_phone?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          matched_payment_id?: string | null
+          message_text?: string | null
+          mpesa_code?: string
+          received_at?: string
+          sender_name?: string | null
+          sender_phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mpesa_sms_inbox_matched_payment_id_fkey"
+            columns: ["matched_payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications_log: {
         Row: {
           channel: string
@@ -728,8 +775,11 @@ export type Database = {
           mpesa_code: string | null
           payment_method: string | null
           pending_approval: boolean | null
+          rejection_reason: string | null
           status: string | null
           updated_at: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           amount: number
@@ -741,8 +791,11 @@ export type Database = {
           mpesa_code?: string | null
           payment_method?: string | null
           pending_approval?: boolean | null
+          rejection_reason?: string | null
           status?: string | null
           updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           amount?: number
@@ -754,8 +807,11 @@ export type Database = {
           mpesa_code?: string | null
           payment_method?: string | null
           pending_approval?: boolean | null
+          rejection_reason?: string | null
           status?: string | null
           updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {
@@ -974,6 +1030,10 @@ export type Database = {
       get_current_customer_id: { Args: never; Returns: string }
       get_user_role: { Args: { user_uuid: string }; Returns: string }
       mark_overdue_payments: { Args: never; Returns: undefined }
+      try_match_mpesa_payment: {
+        Args: { p_payment_id: string }
+        Returns: boolean
+      }
       user_can_view_delivery:
         | { Args: { p_delivery_id: string }; Returns: boolean }
         | { Args: { p_delivery: string; p_user: string }; Returns: boolean }
