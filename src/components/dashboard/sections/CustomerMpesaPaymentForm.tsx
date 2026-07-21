@@ -65,15 +65,15 @@ export function CustomerMpesaPaymentForm() {
       
       if (deliveryIds.length === 0) return [];
 
-      // ✅ FIXED: Only exclude deliveries that have a COMPLETED payment
-      const { data: completedPayments } = await supabase
+      // Exclude deliveries that already have a paid or pending-verification payment
+      const { data: activePayments } = await supabase
         .from("payments")
         .select("delivery_id")
         .in("delivery_id", deliveryIds)
-        .eq("status", "paid");
+        .in("status", ["paid", "completed", "pending_verification"]);
 
-      const paidDeliveryIds = new Set(completedPayments?.map(p => p.delivery_id) || []);
-      const unpaidDeliveries = (data || []).filter(d => !paidDeliveryIds.has(d.id));
+      const blockedDeliveryIds = new Set(activePayments?.map(p => p.delivery_id) || []);
+      const unpaidDeliveries = (data || []).filter(d => !blockedDeliveryIds.has(d.id));
 
       // Fetch delivery items for each
       const deliveriesWithItems = await Promise.all(
