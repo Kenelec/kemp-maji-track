@@ -33,6 +33,7 @@ import { DriversSection } from "./sections/DriversSection";
 import { usePaymentNotifications } from "@/hooks/usePaymentNotifications";
 import { NotificationCenter } from "./NotificationCenter";
 import { QueryDeliveryDialog } from "./sections/QueryDeliveryDialog";
+import { MpesaVerificationsSection } from "./sections/MpesaVerificationsSection";
 
 interface ApprovalRequest {
   id: string;
