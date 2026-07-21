@@ -75,12 +75,12 @@ const PaymentPage = () => {
       
       setDelivery(deliveryData as DeliveryData);
 
-      // ✅ FIXED: Only check for COMPLETED payments, not pending/failed ones
+      // Fetch the latest relevant payment (paid, completed, or awaiting verification)
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .select('id, amount, status, mpesa_code, created_at')
         .eq('delivery_id', deliveryData.id)
-        .in('status', ['paid', 'completed']) // ✅ Only check for successful payments
+        .in('status', ['paid', 'completed', 'pending_verification'])
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -89,7 +89,7 @@ const PaymentPage = () => {
       } else if (paymentData && paymentData.length > 0) {
         setExistingPayment(paymentData[0]);
       } else {
-        setExistingPayment(null); // ✅ Clear if no successful payment exists
+        setExistingPayment(null);
       }
 
       setLoading(false);
