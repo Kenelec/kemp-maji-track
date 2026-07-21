@@ -65,15 +65,15 @@ export function CustomerMpesaPaymentForm() {
       
       if (deliveryIds.length === 0) return [];
 
-      // ✅ FIXED: Only exclude deliveries that have a COMPLETED payment
-      const { data: completedPayments } = await supabase
+      // Exclude deliveries that already have a paid or pending-verification payment
+      const { data: activePayments } = await supabase
         .from("payments")
         .select("delivery_id")
         .in("delivery_id", deliveryIds)
-        .eq("status", "paid");
+        .in("status", ["paid", "completed", "pending_verification"]);
 
-      const paidDeliveryIds = new Set(completedPayments?.map(p => p.delivery_id) || []);
-      const unpaidDeliveries = (data || []).filter(d => !paidDeliveryIds.has(d.id));
+      const blockedDeliveryIds = new Set(activePayments?.map(p => p.delivery_id) || []);
+      const unpaidDeliveries = (data || []).filter(d => !blockedDeliveryIds.has(d.id));
 
       // Fetch delivery items for each
       const deliveriesWithItems = await Promise.all(
@@ -97,14 +97,15 @@ export function CustomerMpesaPaymentForm() {
     return mpesaRegex.test(code);
   };
 
-  // Check if code already exists
+  // Check if code already exists (excluding rejected submissions so customers can retry with the correct code)
   const checkDuplicateCode = async (code: string): Promise<boolean> => {
     const { data } = await supabase
       .from("payments")
-      .select("id")
+      .select("id, status")
       .eq("mpesa_code", code.toUpperCase())
+      .neq("status", "rejected")
       .maybeSingle();
-    
+
     return !!data;
   };
 
@@ -143,9 +144,8 @@ export function CustomerMpesaPaymentForm() {
       const selectedDeliveries = pendingDeliveries?.filter(d => selectedDeliveryIds.includes(d.id));
       if (!selectedDeliveries?.length || !customer) throw new Error("Invalid selection");
 
-      // Create payment records for each selected delivery
+      // Create payment records for each selected delivery — submitted for admin verification
       for (const delivery of selectedDeliveries) {
-        // ✅ FIXED: Only check for COMPLETED payments, not pending ones
         const { data: completedPayment } = await supabase
           .from("payments")
           .select("id")
@@ -157,14 +157,14 @@ export function CustomerMpesaPaymentForm() {
           throw new Error(`This delivery has already been paid on ${format(new Date(delivery.delivery_date), "MMM d, yyyy")}`);
         }
 
-        // ✅ FIXED: Delete any existing pending/failed payments before creating new one
+        // Clear stale pending/failed/rejected submissions for this delivery
         await supabase
           .from("payments")
           .delete()
           .eq("delivery_id", delivery.id)
-          .in("status", ["pending", "failed"]);
+          .in("status", ["pending", "failed", "rejected"]);
 
-        // ✅ FIXED: Since customer is submitting full amount, mark as paid immediately
+        // Insert as pending_verification — admin must confirm against Safaricom SMS
         const { error: insertError } = await supabase
           .from("payments")
           .insert({
@@ -172,31 +172,24 @@ export function CustomerMpesaPaymentForm() {
             delivery_id: delivery.id,
             amount: delivery.total_amount,
             due_date: new Date().toISOString().split("T")[0],
-            status: "paid", // ✅ Mark as paid since full amount is submitted
+            status: "pending_verification",
             payment_method: "mpesa",
             mpesa_code: code,
           });
 
         if (insertError) throw insertError;
 
-        // Update delivery - mark as paid
-        const { error: deliveryError } = await supabase
+        // Record the code on the delivery for reference; do NOT mark paid yet
+        await supabase
           .from("deliveries")
-          .update({
-            payment_status: "paid", // ✅ Mark as paid
-            mpesa_transaction_id: code,
-            customer_confirmed: true,
-            confirmed_at: new Date().toISOString(),
-          })
+          .update({ mpesa_transaction_id: code })
           .eq("id", delivery.id);
-
-        if (deliveryError) throw deliveryError;
       }
     },
     onSuccess: () => {
       toast({
-        title: "Payment Submitted",
-        description: `Payment for ${selectedDeliveryIds.length} ${selectedDeliveryIds.length === 1 ? 'delivery' : 'deliveries'} submitted successfully.`,
+        title: "Submitted for Verification",
+        description: `Your M-Pesa code has been submitted. It will be marked paid once the admin verifies it against the Safaricom SMS.`,
       });
       setMpesaCode("");
       setSelectedDeliveryIds([]);

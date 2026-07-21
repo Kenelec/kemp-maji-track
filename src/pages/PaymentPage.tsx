@@ -75,12 +75,12 @@ const PaymentPage = () => {
       
       setDelivery(deliveryData as DeliveryData);
 
-      // ✅ FIXED: Only check for COMPLETED payments, not pending/failed ones
+      // Fetch the latest relevant payment (paid, completed, or awaiting verification)
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .select('id, amount, status, mpesa_code, created_at')
         .eq('delivery_id', deliveryData.id)
-        .in('status', ['paid', 'completed']) // ✅ Only check for successful payments
+        .in('status', ['paid', 'completed', 'pending_verification'])
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -89,7 +89,7 @@ const PaymentPage = () => {
       } else if (paymentData && paymentData.length > 0) {
         setExistingPayment(paymentData[0]);
       } else {
-        setExistingPayment(null); // ✅ Clear if no successful payment exists
+        setExistingPayment(null);
       }
 
       setLoading(false);
@@ -187,19 +187,19 @@ const PaymentPage = () => {
     );
   }
 
-  // ✅ FIXED: Only show "already initiated" if payment is completed
-  if (existingPayment && (existingPayment.status === 'paid' || existingPayment.status === 'completed')) {
+  // Show pending verification state
+  if (existingPayment && existingPayment.status === 'pending_verification') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <CardTitle>Payment Already Completed</CardTitle>
+            <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+            <CardTitle>Awaiting Verification</CardTitle>
             <CardDescription className="space-y-2">
-              <p>This delivery has already been paid successfully.</p>
+              <p>Your M-Pesa code has been submitted and is awaiting admin verification against the Safaricom SMS.</p>
               <p className="text-sm text-muted-foreground">
                 Amount: KES {existingPayment.amount.toLocaleString()}<br />
-                {existingPayment.mpesa_code && `Receipt: ${existingPayment.mpesa_code}`}
+                {existingPayment.mpesa_code && `Code: ${existingPayment.mpesa_code}`}
               </p>
             </CardDescription>
           </CardHeader>
@@ -207,6 +207,7 @@ const PaymentPage = () => {
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
