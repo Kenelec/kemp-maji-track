@@ -97,14 +97,15 @@ export function CustomerMpesaPaymentForm() {
     return mpesaRegex.test(code);
   };
 
-  // Check if code already exists
+  // Check if code already exists (excluding rejected submissions so customers can retry with the correct code)
   const checkDuplicateCode = async (code: string): Promise<boolean> => {
     const { data } = await supabase
       .from("payments")
-      .select("id")
+      .select("id, status")
       .eq("mpesa_code", code.toUpperCase())
+      .neq("status", "rejected")
       .maybeSingle();
-    
+
     return !!data;
   };
 
