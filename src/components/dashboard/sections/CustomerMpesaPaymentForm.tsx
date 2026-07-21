@@ -31,7 +31,6 @@ export function CustomerMpesaPaymentForm() {
   // Get current customer
   const { data: customer } = useQuery({
     queryKey: ["current-customer-for-payment"],
-    queryKey: ["current-customer-for-payment"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;

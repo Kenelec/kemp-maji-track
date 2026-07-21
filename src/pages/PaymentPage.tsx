@@ -78,7 +78,7 @@ const PaymentPage = () => {
       // ✅ FIXED: Only check for COMPLETED payments, not pending/failed ones
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
-        .select('id, amount, status, mpesa_receipt, created_at')
+        .select('id, amount, status, mpesa_code, created_at')
         .eq('delivery_id', deliveryData.id)
         .in('status', ['paid', 'completed']) // ✅ Only check for successful payments
         .order('created_at', { ascending: false })
