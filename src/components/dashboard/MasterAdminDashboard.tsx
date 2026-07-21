@@ -563,6 +563,9 @@ const MasterAdminDashboard = ({ onLogout }: MasterAdminDashboardProps) => {
               </div>
             )}
 
+            <MpesaVerificationsSection canAct={true} />
+
+
             {/* Query Delivery Dialog */}
             <QueryDeliveryDialog
               query={selectedQuery}
