@@ -187,8 +187,8 @@ export function CustomerMpesaPaymentForm() {
     },
     onSuccess: () => {
       toast({
-        title: "Payment Submitted",
-        description: `Payment for ${selectedDeliveryIds.length} ${selectedDeliveryIds.length === 1 ? 'delivery' : 'deliveries'} submitted successfully.`,
+        title: "Submitted for Verification",
+        description: `Your M-Pesa code has been submitted. It will be marked paid once the admin verifies it against the Safaricom SMS.`,
       });
       setMpesaCode("");
       setSelectedDeliveryIds([]);
