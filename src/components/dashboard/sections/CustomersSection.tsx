@@ -1,208 +1,192 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Upload, History } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { CustomerFormDialog } from "../forms/CustomerFormDialog";
-import { ExcelUploadDialog } from "../ExcelUploadDialog";
-import { CustomerPaymentHistoryDialog } from "./CustomerPaymentHistoryDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { CustomerForm } from '../forms/CustomerForm';
+import { Edit, Plus, User, MapPin, Phone, Mail } from 'lucide-react';
 
-export function CustomersSection() {
-  const { toast } = useToast();
-  const { userRole } = useAuth();
-  const isMasterAdmin = userRole === 'MasterAdmin';
-  const queryClient = useQueryClient();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<any>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [historyCustomer, setHistoryCustomer] = useState<any>(null);
+interface Customer {
+  id: string;
+  customer_name: string;
+  phone: string;
+  email: string;
+  area: string;
+  address: string;
+  created_at: string;
+}
 
-  const { data: customers, isLoading } = useQuery({
-    queryKey: ["customers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    },
-  });
+export const CustomersSection = () => {
+  const { user } = useAuth();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [sortField, setSortField] = useState<keyof Customer | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [loading, setLoading] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("customers")
-        .delete()
-        .eq("id", id);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-      toast({
-        title: "Customer deleted",
-        description: "Customer has been removed successfully.",
-      });
-      setDeletingId(null);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to delete customer: " + error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const fetchCustomers = async () => {
+    setLoading(true);
+    
+    let query = supabase
+      .from('customers')
+      .select('*');
 
-  const handleEdit = (customer: any) => {
-    setEditingCustomer(customer);
-    setIsFormOpen(true);
+    // Apply sorting if field is selected
+    if (sortField) {
+      query = query.order(sortField, { ascending: sortOrder === 'asc' });
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching customers:', error);
+    } else {
+      setCustomers(data || []);
+    }
+    
+    setLoading(false);
   };
 
-  const handleAdd = () => {
-    setEditingCustomer(null);
-    setIsFormOpen(true);
+  useEffect(() => {
+    fetchCustomers();
+  }, [sortField, sortOrder]);
+
+  const handleSort = (field: keyof Customer) => {
+    if (sortField === field) {
+      // Toggle sort order if clicking same field
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Sort by new field in ascending order
+      setSortField(field);
+      setSortOrder('asc');
+    }
   };
+
+  const getSortIcon = (field: keyof Customer) => {
+    if (sortField !== field) return '↕️';
+    return sortOrder === 'asc' ? '↑' : '↓';
+  };
+
+  if (loading) {
+    return <div className="text-center py-8">Loading customers...</div>;
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Customers</h2>
-          <p className="text-muted-foreground">Manage customer information</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsExcelUploadOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import Excel
-          </Button>
-          <Button className="bg-gradient-secondary" onClick={handleAdd}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Customer
-          </Button>
-        </div>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-foreground">Customers</h2>
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Customer
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Customer</DialogTitle>
+            </DialogHeader>
+            <CustomerForm onClose={() => setShowCreateDialog(false)} />
+          </DialogContent>
+        </Dialog>
       </div>
-      
+
       <Card>
         <CardHeader>
-          <CardTitle>Customer Database</CardTitle>
-          <CardDescription>View and manage customer profiles</CardDescription>
+          <CardTitle>All Customers</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : !customers || customers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No customers found. Add your first customer to get started.
-            </div>
-          ) : (
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Area</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('id')}
+                  >
+                    ID {getSortIcon('id')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('customer_name')}
+                  >
+                    Name {getSortIcon('customer_name')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('phone')}
+                  >
+                    Phone {getSortIcon('phone')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('email')}
+                  >
+                    Email {getSortIcon('email')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('area')}
+                  >
+                    Area {getSortIcon('area')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('address')}
+                  >
+                    Address {getSortIcon('address')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('created_at')}
+                  >
+                    Created {getSortIcon('created_at')}
+                  </TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {customers.map((customer) => (
                   <TableRow key={customer.id}>
-                    <TableCell className="font-medium">{customer.customer_name}</TableCell>
-                    <TableCell>{customer.email || "—"}</TableCell>
-                    <TableCell>{customer.phone || "—"}</TableCell>
-                    <TableCell>{customer.area || "—"}</TableCell>
-                    <TableCell>{customer.address || "—"}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setHistoryCustomer(customer)}
-                        title="View History"
-                      >
-                        <History className="w-4 h-4" />
+                    <TableCell className="font-medium">{customer.id}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{customer.customer_name}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <Phone className="w-4 h-4 mr-2 text-muted-foreground" />
+                        {customer.phone}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <Mail className="w-4 h-4 mr-2 text-muted-foreground" />
+                        {customer.email || 'N/A'}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <MapPin className="w-4 h-4 mr-2 text-muted-foreground" />
+                        {customer.area}
+                      </div>
+                    </TableCell>
+                    <TableCell>{customer.address || 'N/A'}</TableCell>
+                    <TableCell>{new Date(customer.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="outline">
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
                       </Button>
-                      {isMasterAdmin && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(customer)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeletingId(customer.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
+          </div>
         </CardContent>
       </Card>
-
-      <CustomerFormDialog
-        open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        editData={editingCustomer}
-      />
-
-      <ExcelUploadDialog
-        open={isExcelUploadOpen}
-        onOpenChange={setIsExcelUploadOpen}
-        type="customers"
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customers"] })}
-      />
-
-      <CustomerPaymentHistoryDialog
-        open={!!historyCustomer}
-        onOpenChange={(open) => !open && setHistoryCustomer(null)}
-        customer={historyCustomer}
-      />
-
-      <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deletingId && deleteMutation.mutate(deletingId)}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
-}
+};
