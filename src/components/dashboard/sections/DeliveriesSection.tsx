@@ -260,16 +260,19 @@ export function DeliveriesSection() {
           ) : (
             <div 
               ref={tableContainerRef}
-              className="overflow-x-auto"
+              className="overflow-x-auto relative"
+              style={{ maxHeight: '60vh' }}
             >
-              {/* NEW: Fixed height container with overflow for scrolling */}
-              <div className="max-h-[60vh] overflow-y-auto">
+              {/* ABSOLUTE FIXED HEADER */}
+              <div 
+                className="absolute top-0 left-0 right-0 bg-background z-[100] shadow-sm border-b"
+                style={{ minHeight: '48px' }} // Adjust based on your header height
+              >
                 <Table className="min-w-[1200px]">
-                  {/* NEW: Fixed header with higher z-index and position */}
-                  <thead className="bg-background sticky top-0 z-[5]">
-                    <tr>
+                  <TableHeader className="bg-background">
+                    <TableRow>
                       <TableHead 
-                        className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[10]"
+                        className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[200]"
                         onClick={() => handleSort('customers.customer_name')}
                       >
                         Customer {getSortIcon('customers.customer_name')}
@@ -312,16 +315,22 @@ export function DeliveriesSection() {
                       >
                         Confirmation {getSortIcon('payment_status')}
                       </TableHead>
-                      <TableHead className="text-right sticky right-0 bg-background z-[10]">Actions</TableHead>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      <TableHead className="text-right sticky right-0 bg-background z-[200]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                </Table>
+              </div>
+              
+              {/* SCROLLABLE DATA BODY */}
+              <div className="pt-12"> {/* Add padding to account for fixed header */}
+                <Table className="min-w-[1200px]">
+                  <TableBody>
                     {sortedDeliveries.map((delivery) => {
                       const confirmStatus = getConfirmationStatus(delivery);
                       const StatusIcon = confirmStatus.icon;
                       return (
                         <TableRow key={delivery.id}>
-                          <TableCell className="font-medium sticky left-0 bg-background z-[5]">
+                          <TableCell className="font-medium sticky left-0 bg-background z-[150]">
                             {delivery.customers?.customer_name || "Unknown"}
                           </TableCell>
                           <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
@@ -347,7 +356,7 @@ export function DeliveriesSection() {
                               {confirmStatus.label}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right sticky right-0 bg-background z-[5]">
+                          <TableCell className="text-right sticky right-0 bg-background z-[150]">
                             {isMasterAdmin && (
                               <div className="flex justify-end gap-2">
                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
@@ -362,7 +371,7 @@ export function DeliveriesSection() {
                         </TableRow>
                       );
                     })}
-                  </tbody>
+                  </TableBody>
                 </Table>
               </div>
             </div>
