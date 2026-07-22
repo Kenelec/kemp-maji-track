@@ -54,14 +54,77 @@ export function PaymentsSection() {
             )
           )
         `)
-        // NEW: Apply sorting to the query
-        .order(sortField || "created_at", { ascending: sortOrder === 'asc' });
+        // NEW: Remove ordering from query since we'll sort client-side
+        // .order(sortField || "created_at", { ascending: sortOrder === 'asc' });
       
       if (error) throw error;
       return data;
     },
     refetchInterval: 5000,
   });
+
+  // NEW: Client-side sorting with proper handling
+  const sortedPayments = useMemo(() => {
+    if (!payments) return [];
+    
+    return [...payments].sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortField) {
+        case 'delivery_date':
+          // NEW: Sort by delivery date from deliveries
+          aValue = new Date(a.deliveries?.delivery_date || 0).getTime();
+          bValue = new Date(b.deliveries?.delivery_date || 0).getTime();
+          break;
+        case 'customers.customer_name':
+          aValue = (a.customers?.customer_name || "").toLowerCase();
+          bValue = (b.customers?.customer_name || "").toLowerCase();
+          break;
+        case 'deliveries.total_amount':
+          aValue = a.deliveries?.total_amount || 0;
+          bValue = b.deliveries?.total_amount || 0;
+          break;
+        case 'amount':
+          aValue = a.amount || 0;
+          bValue = b.amount || 0;
+          break;
+        case 'balance':
+          // NEW: Sort by calculated balance
+          const balanceA = (a.deliveries?.total_amount || 0) - (a.amount || 0);
+          const balanceB = (b.deliveries?.total_amount || 0) - (b.amount || 0);
+          aValue = balanceA;
+          bValue = balanceB;
+          break;
+        case 'payment_method':
+          aValue = (a.payment_method || "").toLowerCase();
+          bValue = (b.payment_method || "").toLowerCase();
+          break;
+        case 'mpesa_code':
+          aValue = (a.mpesa_code || "").toLowerCase();
+          bValue = (b.mpesa_code || "").toLowerCase();
+          break;
+        case 'status':
+          aValue = (a.status || "").toLowerCase();
+          bValue = (b.status || "").toLowerCase();
+          break;
+        case 'created_at':
+        default:
+          aValue = new Date(a.created_at || 0).getTime();
+          bValue = new Date(b.created_at || 0).getTime();
+          break;
+      }
+      
+      // For string comparisons
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue);
+        return sortOrder === 'asc' ? comparison : -comparison;
+      }
+      
+      // For numeric comparisons
+      const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [payments, sortField, sortOrder]);
 
   // NEW: Handle column sorting
   const handleSort = (field: string) => {
@@ -244,7 +307,7 @@ export function PaymentsSection() {
         <CardContent>
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : !payments || payments.length === 0 ? (
+          ) : !sortedPayments || sortedPayments.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No payments found. Add your first payment to get started.
             </div>
@@ -252,6 +315,12 @@ export function PaymentsSection() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('delivery_date')}
+                  >
+                    Delivery Date {getSortIcon('delivery_date')}
+                  </TableHead>
                   <TableHead 
                     className="cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('customers.customer_name')}
@@ -272,18 +341,17 @@ export function PaymentsSection() {
                   >
                     Paid Amount {getSortIcon('amount')}
                   </TableHead>
-                  <TableHead>Balance</TableHead>
                   <TableHead 
                     className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('due_date')}
+                    onClick={() => handleSort('balance')} // NEW: Added sorting to balance column
                   >
-                    Due Date {getSortIcon('due_date')}
+                    Balance {getSortIcon('balance')}
                   </TableHead>
                   <TableHead 
                     className="cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('payment_method')}
                   >
-                    Payment Method {getSortIcon('payment_method')}
+                    Payment Mode {getSortIcon('payment_method')} {/* CHANGED: Payment Method to Payment Mode */}
                   </TableHead>
                   <TableHead 
                     className="cursor-pointer hover:bg-gray-100"
@@ -301,13 +369,14 @@ export function PaymentsSection() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payments.map((payment) => {
+                {sortedPayments.map((payment) => {
                   const derived = derivedStatusById.get(payment.id);
                   const type = derived?.type || payment.status;
                   const label = derived?.label || payment.status;
                   
                   return (
                     <TableRow key={payment.id}>
+                      <TableCell>{format(new Date(payment.deliveries?.delivery_date || payment.created_at), "MMM dd, yyyy")}</TableCell> {/* NEW: Delivery Date moved to first column */}
                       <TableCell className="font-medium">
                         {payment.customers?.customer_name || "Unknown"}
                       </TableCell>
@@ -347,8 +416,7 @@ export function PaymentsSection() {
                           </span>
                         ) : "—"}
                       </TableCell>
-                      <TableCell>{format(new Date(payment.due_date), "MMM dd, yyyy")}</TableCell>
-                      <TableCell className="capitalize">{payment.payment_method}</TableCell>
+                      <TableCell className="capitalize">{payment.payment_method}</TableCell> {/* CHANGED: Column name changed to Payment Mode */}
                       <TableCell>{payment.mpesa_code || "—"}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(type)}>
