@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { DeliveryForm } from '../forms/DeliveryForm';
-import { Edit, Plus, MapPin, Calendar, Package, CreditCard } from 'lucide-react';
+// REMOVE THESE FORM IMPORTS:
+// import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+// import { DeliveryForm } from '../forms/DeliveryForm';
+import { /*Edit, Plus,*/ MapPin, Calendar, Package, CreditCard } from 'lucide-react'; // Remove unused icons
 
 interface Delivery {
   id: string;
@@ -45,7 +46,7 @@ export const DeliveriesSection = () => {
   const [sortField, setSortField] = useState<keyof Delivery | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  // REMOVE THIS STATE: const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const fetchDeliveries = async () => {
     setLoading(true);
@@ -127,7 +128,8 @@ export const DeliveriesSection = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-foreground">Deliveries</h2>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        {/* REMOVE THE ENTIRE DIALOG BUTTON */}
+        {/* <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
@@ -140,7 +142,7 @@ export const DeliveriesSection = () => {
             </DialogHeader>
             <DeliveryForm onClose={() => setShowCreateDialog(false)} />
           </DialogContent>
-        </Dialog>
+        </Dialog> */}
       </div>
 
       <Tabs defaultValue="all" className="w-full">
@@ -220,8 +222,8 @@ export const DeliveriesSection = () => {
                         <TableCell>{getDeliveryStatusBadge(delivery.delivery_status)}</TableCell>
                         <TableCell>
                           <Button size="sm" variant="outline">
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit
+                            {/* <Edit className="w-4 h-4 mr-2" /> */}
+                            View
                           </Button>
                         </TableCell>
                       </TableRow>
