@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ export function PaymentsSection() {
           deliveries (
             total_amount,
             delivery_date,
+            delivery_note_no,
             delivery_items (
               product_name,
               quantity
@@ -80,6 +81,11 @@ export function PaymentsSection() {
           aValue = (a.customers?.customer_name || "").toLowerCase();
           bValue = (b.customers?.customer_name || "").toLowerCase();
           break;
+        case 'deliveries.delivery_note_no':
+          // NEW: Sort by delivery note no with numeric handling
+          const aNum = parseInt(a.deliveries?.delivery_note_no?.replace(/\D/g, '') || '0');
+          const bNum = parseInt(b.deliveries?.delivery_note_no?.replace(/\D/g, '') || '0');
+          return sortOrder === 'asc' ? aNum - bNum : bNum - aNum;
         case 'deliveries.total_amount':
           aValue = a.deliveries?.total_amount || 0;
           bValue = b.deliveries?.total_amount || 0;
@@ -280,6 +286,9 @@ export function PaymentsSection() {
     return map;
   }, [payments]);
 
+  // NEW: Reference for table container to enable horizontal scrolling
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -312,151 +321,167 @@ export function PaymentsSection() {
               No payments found. Add your first payment to get started.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('delivery_date')}
-                  >
-                    Delivery Date {getSortIcon('delivery_date')}
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('customers.customer_name')}
-                  >
-                    Customer {getSortIcon('customers.customer_name')}
-                  </TableHead>
-                  <TableHead>Products</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('deliveries.total_amount')}
-                  >
-                    Delivery Total {getSortIcon('deliveries.total_amount')}
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('amount')}
-                  >
-                    Paid Amount {getSortIcon('amount')}
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('balance')} // NEW: Added sorting to balance column
-                  >
-                    Balance {getSortIcon('balance')}
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('payment_method')}
-                  >
-                    Payment Mode {getSortIcon('payment_method')} {/* CHANGED: Payment Method to Payment Mode */}
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('mpesa_code')}
-                  >
-                    M-Pesa Code {getSortIcon('mpesa_code')}
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('status')}
-                  >
-                    Status {getSortIcon('status')}
-                  </TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedPayments.map((payment) => {
-                  const derived = derivedStatusById.get(payment.id);
-                  const type = derived?.type || payment.status;
-                  const label = derived?.label || payment.status;
-                  
-                  return (
-                    <TableRow key={payment.id}>
-                      <TableCell>{format(new Date(payment.deliveries?.delivery_date || payment.created_at), "MMM dd, yyyy")}</TableCell> {/* NEW: Delivery Date moved to first column */}
-                      <TableCell className="font-medium">
-                        {payment.customers?.customer_name || "Unknown"}
-                      </TableCell>
-                      <TableCell>
-                        {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
-                          payment.deliveries.delivery_items.map((item: any, idx: number) => (
-                            <div key={idx}>{item.product_name}</div>
-                          ))
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
-                          payment.deliveries.delivery_items.map((item: any, idx: number) => (
-                            <div key={idx}>{item.quantity}</div>
-                          ))
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {payment.deliveries?.total_amount 
-                          ? `KSh ${Number(payment.deliveries.total_amount).toLocaleString()}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="font-semibold text-green-600">
-                        KSh {Number(payment.amount).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {payment.deliveries?.total_amount ? (
-                          <span className={Number(payment.deliveries.total_amount) - Number(payment.amount) > 0 
-                            ? "text-red-600" 
-                            : "text-green-600"
-                          }>
-                            KSh {(Number(payment.deliveries.total_amount) - Number(payment.amount)).toLocaleString()}
-                          </span>
-                        ) : "—"}
-                      </TableCell>
-                      <TableCell className="capitalize">{payment.payment_method}</TableCell> {/* CHANGED: Column name changed to Payment Mode */}
-                      <TableCell>{payment.mpesa_code || "—"}</TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(type)}>
-                          {label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {/* Only show Mark Paid button for pending payments - MasterAdmin only */}
-                          {isMasterAdmin && payment.status === "pending" && !label.includes('pending') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updatePaymentStatus.mutate({ 
-                                id: payment.id, 
-                                status: "paid", 
-                                deliveryId: payment.delivery_id 
-                              })}
-                            >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Mark Paid
-                            </Button>
+            <div 
+              ref={tableContainerRef}
+              className="overflow-x-auto max-h-[60vh] overflow-y-auto"
+            >
+              <Table className="min-w-[1200px]">
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-20"
+                      onClick={() => handleSort('delivery_date')}
+                    >
+                      Delivery Date {getSortIcon('delivery_date')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('customers.customer_name')}
+                    >
+                      Customer {getSortIcon('customers.customer_name')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('deliveries.delivery_note_no')} // NEW: Added sorting to delivery note no
+                    >
+                      Delivery Note No. {getSortIcon('deliveries.delivery_note_no')} {/* NEW: Added Delivery Note No. column */}
+                    </TableHead>
+                    <TableHead>Products</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('deliveries.total_amount')}
+                    >
+                      Delivery Total {getSortIcon('deliveries.total_amount')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('amount')}
+                    >
+                      Paid Amount {getSortIcon('amount')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('balance')} // NEW: Added sorting to balance column
+                    >
+                      Balance {getSortIcon('balance')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('payment_method')}
+                    >
+                      Payment Mode {getSortIcon('payment_method')} {/* CHANGED: Payment Method to Payment Mode */}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('mpesa_code')}
+                    >
+                      M-Pesa Code {getSortIcon('mpesa_code')}
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('status')}
+                    >
+                      Status {getSortIcon('status')}
+                    </TableHead>
+                    <TableHead className="text-right sticky right-0 bg-background z-20">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedPayments.map((payment) => {
+                    const derived = derivedStatusById.get(payment.id);
+                    const type = derived?.type || payment.status;
+                    const label = derived?.label || payment.status;
+                    
+                    return (
+                      <TableRow key={payment.id}>
+                        <TableCell className="sticky left-0 bg-background z-10">
+                          {format(new Date(payment.deliveries?.delivery_date || payment.created_at), "MMM dd, yyyy")}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {payment.customers?.customer_name || "Unknown"}
+                        </TableCell>
+                        <TableCell>
+                          {payment.deliveries?.delivery_note_no || "—"} {/* NEW: Added Delivery Note No. column */}
+                        </TableCell>
+                        <TableCell>
+                          {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
+                            payment.deliveries.delivery_items.map((item: any, idx: number) => (
+                              <div key={idx}>{item.product_name}</div>
+                            ))
+                          ) : (
+                            "—"
                           )}
-                          {isMasterAdmin && (
-                            <>
-                              <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </>
+                        </TableCell>
+                        <TableCell>
+                          {payment.deliveries?.delivery_items && payment.deliveries.delivery_items.length > 0 ? (
+                            payment.deliveries.delivery_items.map((item: any, idx: number) => (
+                              <div key={idx}>{item.quantity}</div>
+                            ))
+                          ) : (
+                            "—"
                           )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {payment.deliveries?.total_amount 
+                            ? `KSh ${Number(payment.deliveries.total_amount).toLocaleString()}`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="font-semibold text-green-600">
+                          KSh {Number(payment.amount).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {payment.deliveries?.total_amount ? (
+                            <span className={Number(payment.deliveries.total_amount) - Number(payment.amount) > 0 
+                              ? "text-red-600" 
+                              : "text-green-600"
+                            }>
+                              KSh {(Number(payment.deliveries.total_amount) - Number(payment.amount)).toLocaleString()}
+                            </span>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell className="capitalize">{payment.payment_method}</TableCell>
+                        <TableCell>{payment.mpesa_code || "—"}</TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(type)}>
+                            {label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right sticky right-0 bg-background z-10">
+                          <div className="flex justify-end gap-2">
+                            {/* Only show Mark Paid button for pending payments - MasterAdmin only */}
+                            {isMasterAdmin && payment.status === "pending" && !label.includes('pending') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => updatePaymentStatus.mutate({ 
+                                  id: payment.id, 
+                                  status: "paid", 
+                                  deliveryId: payment.delivery_id 
+                                })}
+                              >
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Mark Paid
+                              </Button>
+                            )}
+                            {isMasterAdmin && (
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => handleEdit(payment)}>
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDelete(payment.id)}>
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
