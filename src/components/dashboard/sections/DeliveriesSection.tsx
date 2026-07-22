@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,8 @@ export function DeliveriesSection() {
           ),
           delivery_queries (id, status)
         `)
-        // NEW: Apply sorting to the query - FIXED for delivery_note_no to handle numeric sorting
-        .order(sortField || "delivery_date", { ascending: sortOrder === 'asc' });
+        // NEW: Remove ordering from query since we'll sort client-side
+        // .order(sortField || "delivery_date", { ascending: sortOrder === 'asc' });
       
       if (error) throw error;
       return data;
@@ -63,7 +63,76 @@ export function DeliveriesSection() {
     refetchInterval: 5000,
   });
 
-  // NEW: Handle column sorting - FIXED to handle different column types
+  // NEW: Client-side sorting with proper numeric handling
+  const sortedDeliveries = useMemo(() => {
+    if (!deliveries) return [];
+    
+    return [...deliveries].sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortField) {
+        case 'customers.customer_name':
+          aValue = (a.customers?.customer_name || "").toLowerCase();
+          bValue = (b.customers?.customer_name || "").toLowerCase();
+          break;
+        case 'drivers.name':
+          aValue = (a.drivers?.name || "").toLowerCase();
+          bValue = (b.drivers?.name || "").toLowerCase();
+          break;
+        case 'delivery_note_no':
+          // NEW: Handle numeric sorting for delivery note numbers
+          const aNum = parseInt(a.delivery_note_no?.replace(/\D/g, '') || '0');
+          const bNum = parseInt(b.delivery_note_no?.replace(/\D/g, '') || '0');
+          return sortOrder === 'asc' ? aNum - bNum : bNum - aNum;
+        case 'qty':
+          aValue = a.qty || 0;
+          bValue = b.qty || 0;
+          break;
+        case 'unit_rate':
+          aValue = a.unit_rate || 0;
+          bValue = b.unit_rate || 0;
+          break;
+        case 'total_amount':
+          aValue = a.total_amount || 0;
+          bValue = b.total_amount || 0;
+          break;
+        case 'payment_status':
+          // NEW: Sort by confirmation status
+          const getStatusValue = (delivery: any) => {
+            if (delivery.payment_status === 'paid') return 1;
+            if (delivery.payment_status === 'partial') return 2;
+            if (delivery.discrepancy_flag || (delivery.delivery_queries && delivery.delivery_queries.length > 0)) return 3;
+            if (delivery.customer_confirmed) return 4;
+            if (delivery.auto_confirmed) return 5;
+            return 6; // open
+          };
+          return sortOrder === 'asc' ? getStatusValue(a) - getStatusValue(b) : getStatusValue(b) - getStatusValue(a);
+        case 'delivery_date':
+        default:
+          aValue = new Date(a.delivery_date || 0).getTime();
+          bValue = new Date(b.delivery_date || 0).getTime();
+          break;
+      }
+      
+      // For string comparisons
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue);
+        return sortOrder === 'asc' ? comparison : -comparison;
+      }
+      
+      // For numeric comparisons
+      if (sortField !== 'payment_status' && sortField !== 'delivery_note_no') {
+        const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+        return sortOrder === 'asc' ? comparison : -comparison;
+      }
+      
+      // Default case for dates
+      const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [deliveries, sortField, sortOrder]);
+
+  // NEW: Handle column sorting
   const handleSort = (field: string) => {
     if (sortField === field) {
       // Toggle sort order if clicking same field
@@ -86,22 +155,22 @@ export function DeliveriesSection() {
     
     // Check payment status first - highest priority
     if (delivery.payment_status === 'paid') {
-      return { label: "Paid", color: "bg-green-100 text-green-800", icon: CheckCircle, value: 'paid' };
+      return { label: "Paid", color: "bg-green-100 text-green-800", icon: CheckCircle };
     }
     if (delivery.payment_status === 'partial') {
-      return { label: "Partial Payment", color: "bg-blue-100 text-blue-800", icon: CreditCard, value: 'partial' };
+      return { label: "Partial Payment", color: "bg-blue-100 text-blue-800", icon: CreditCard };
     }
     
     if (delivery.discrepancy_flag || hasQuery) {
-      return { label: "Issue", color: "bg-red-100 text-red-800", icon: AlertCircle, value: 'issue' };
+      return { label: "Issue", color: "bg-red-100 text-red-800", icon: AlertCircle };
     }
     if (delivery.customer_confirmed) {
-      return { label: "Confirmed", color: "bg-green-100 text-green-800", icon: CheckCircle, value: 'confirmed' };
+      return { label: "Confirmed", color: "bg-green-100 text-green-800", icon: CheckCircle };
     }
     if (delivery.auto_confirmed) {
-      return { label: "Auto-Confirmed", color: "bg-gray-100 text-gray-800", icon: CheckCircle, value: 'auto_confirmed' };
+      return { label: "Auto-Confirmed", color: "bg-gray-100 text-gray-800", icon: CheckCircle };
     }
-    return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock, value: 'open' };
+    return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock };
   };
 
   const deleteMutation = useMutation({
@@ -181,7 +250,7 @@ export function DeliveriesSection() {
         <CardContent>
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : !deliveries || deliveries.length === 0 ? (
+          ) : !sortedDeliveries || sortedDeliveries.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No deliveries found. Create your first delivery to get started.
             </div>
@@ -237,7 +306,7 @@ export function DeliveriesSection() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {deliveries.map((delivery) => {
+                {sortedDeliveries.map((delivery) => {
                   const confirmStatus = getConfirmationStatus(delivery);
                   const StatusIcon = confirmStatus.icon;
                   return (
