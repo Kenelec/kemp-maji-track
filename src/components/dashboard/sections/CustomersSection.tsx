@@ -151,24 +151,14 @@ export function CustomersSection() {
                   >
                     Email {getSortIcon('email')}
                   </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('phone')}
-                  >
-                    Phone {getSortIcon('phone')}
-                  </TableHead>
+                  <TableHead>Phone</TableHead> {/* NO SORTING */}
                   <TableHead 
                     className="cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('area')}
                   >
                     Area {getSortIcon('area')}
                   </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('address')}
-                  >
-                    Address {getSortIcon('address')}
-                  </TableHead>
+                  <TableHead>Address</TableHead> {/* NO SORTING */}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
