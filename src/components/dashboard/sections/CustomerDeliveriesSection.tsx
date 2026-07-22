@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PaymentFormDialog } from '../dialogs/PaymentFormDialog';
+// REMOVE FORM IMPORTS:
+// import { PaymentFormDialog } from '../dialogs/PaymentFormDialog';
 import { CreditCard, MapPin, Calendar, Package } from 'lucide-react';
 
 interface CustomerDelivery {
@@ -176,7 +177,11 @@ export const CustomerDeliveriesSection = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <PaymentFormDialog delivery={delivery} />
+                          {/* REMOVE THE PAYMENT FORM DIALOG */}
+                          {/* <PaymentFormDialog delivery={delivery} /> */}
+                          <Button size="sm" variant="outline">
+                            Pay
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
