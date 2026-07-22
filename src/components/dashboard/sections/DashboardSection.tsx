@@ -1,159 +1,282 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Users, Package, CreditCard, MapPin, BarChart3, TrendingUp, DollarSign } from 'lucide-react';
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState } from "react";
+import { Users, Truck, AlertCircle, CreditCard } from "lucide-react";
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from "date-fns";
+import { OverduePaymentsDialog } from "./OverduePaymentsDialog";
 
-interface Stats {
-  total_customers: number;
-  total_deliveries: number;
-  pending_deliveries: number;
-  total_payments: number;
-  pending_payments: number;
-  total_revenue: number;
+interface DashboardSectionProps {
+  onNavigateToTab?: (tabId: string) => void;
 }
 
-export const DashboardSection = () => {
-  const { user } = useAuth();
-  const [stats, setStats] = useState<Stats>({
-    total_customers: 0,
-    total_deliveries: 0,
-    pending_deliveries: 0,
-    total_payments: 0,
-    pending_payments: 0,
-    total_revenue: 0
-  });
-  const [loading, setLoading] = useState(true);
+export function DashboardSection({ onNavigateToTab }: DashboardSectionProps) {
+  const [deliveryPeriod, setDeliveryPeriod] = useState("today");
+  const [paymentPeriod, setPaymentPeriod] = useState("today");
+  const [mpesaPeriod, setMpesaPeriod] = useState("today");
+  const [overdueDialogOpen, setOverdueDialogOpen] = useState(false);
 
-  const fetchStats = async () => {
-    setLoading(true);
-    
-    try {
-      // Get stats based on user role (Master Admin vs Admin)
-      let baseQuery = '';
-      if (user?.role === 'admin') {
-        // Get admin's area for filtering
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('area')
-          .eq('id', user.id)
-          .single();
-        
-        if (userProfile?.area) {
-          baseQuery = `customers.area = '${userProfile.area}'`;
-        }
-      }
-
-      // Fetch all statistics
-      const [customersRes, deliveriesRes, paymentsRes] = await Promise.all([
-        supabase.from('customers').select('*', { count: 'exact' }),
-        supabase.from('deliveries').select('*', { count: 'exact' }),
-        supabase.from('payments').select('*', { count: 'exact' })
-      ]);
-
-      const [pendingDeliveriesRes, pendingPaymentsRes, revenueRes] = await Promise.all([
-        supabase.from('deliveries').select('*', { count: 'exact' }).eq('delivery_status', 'pending'),
-        supabase.from('payments').select('*', { count: 'exact' }).eq('status', 'pending'),
-        supabase.from('payments').select('amount', { count: 'exact' }).eq('status', 'paid')
-      ]);
-
-      setStats({
-        total_customers: customersRes.count || 0,
-        total_deliveries: deliveriesRes.count || 0,
-        pending_deliveries: pendingDeliveriesRes.count || 0,
-        total_payments: paymentsRes.count || 0,
-        pending_payments: pendingPaymentsRes.count || 0,
-        total_revenue: revenueRes.data?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
-      });
-    } catch (error) {
-      console.error('Error fetching stats:', error);
+  const getDateRange = (period: string) => {
+    const now = new Date();
+    switch (period) {
+      case "today":
+        return { start: startOfDay(now), end: endOfDay(now) };
+      case "this-week":
+        return { start: startOfWeek(now), end: endOfWeek(now) };
+      case "this-month":
+        return { start: startOfMonth(now), end: endOfMonth(now) };
+      case "this-year":
+        return { start: startOfYear(now), end: endOfYear(now) };
+      case "all":
+        return null;
+      default:
+        return { start: startOfDay(now), end: endOfDay(now) };
     }
-    
-    setLoading(false);
   };
 
-  useEffect(() => {
-    fetchStats();
-  }, [user]);
+  const { data: customersCount } = useQuery({
+    queryKey: ["customers-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("customers")
+        .select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+    refetchInterval: 10000,
+  });
 
-  if (loading) {
-    return <div className="text-center py-8">Loading dashboard...</div>;
-  }
+  const { data: deliveriesData } = useQuery({
+    queryKey: ["deliveries-stats", deliveryPeriod],
+    queryFn: async () => {
+      const dateRange = getDateRange(deliveryPeriod);
+      let query = supabase.from("deliveries").select("*");
+      
+      if (dateRange) {
+        const { start, end } = dateRange;
+        query = query
+          .gte("delivery_date", format(start, "yyyy-MM-dd"))
+          .lte("delivery_date", format(end, "yyyy-MM-dd"));
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: paymentsData } = useQuery({
+    queryKey: ["payments-stats", paymentPeriod],
+    queryFn: async () => {
+      const dateRange = getDateRange(paymentPeriod);
+      let query = supabase.from("payments").select("*").gt("amount", 0); // Only payments with actual amounts
+      
+      if (dateRange) {
+        const { start, end } = dateRange;
+        query = query
+          .gte("created_at", start.toISOString())
+          .lte("created_at", end.toISOString());
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: mpesaPaymentsData } = useQuery({
+    queryKey: ["mpesa-payments-stats", mpesaPeriod],
+    queryFn: async () => {
+      const dateRange = getDateRange(mpesaPeriod);
+      let query = supabase.from("payments")
+        .select("*")
+        .eq("payment_method", "mpesa")
+        .gt("amount", 0); // Count any M-Pesa payment received
+      
+      if (dateRange) {
+        query = query
+          .gte("created_at", dateRange.start.toISOString())
+          .lte("created_at", dateRange.end.toISOString());
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: outstandingPayments } = useQuery({
+    queryKey: ["outstanding-payments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*, customers(customer_name), deliveries(total_amount)")
+        .in("status", ["overdue", "pending"]);
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 5000,
+  });
+
+  // Count all cash payments regardless of status (any cash received)
+  const cashPayments = paymentsData?.filter(p => p.payment_method === "cash" && Number(p.amount || 0) > 0) || [];
+  const cashTotal = cashPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const mpesaTotal = mpesaPaymentsData?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+  
+  // Calculate outstanding total (delivery amount - paid amount)
+  const outstandingTotal = outstandingPayments?.reduce((sum, p) => {
+    const deliveryTotal = Number(p.deliveries?.total_amount || 0);
+    const paidAmount = Number(p.amount || 0);
+    const balance = deliveryTotal - paidAmount;
+    return sum + (balance > 0 ? balance : 0);
+  }, 0) || 0;
+  const uniqueOutstandingCustomers = new Set(outstandingPayments?.map(p => p.customer_id) || []).size;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-foreground">Dashboard Overview</h2>
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-xl font-bold text-foreground">Dashboard</h2>
+        <p className="text-sm text-muted-foreground">Overview of your business metrics</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+      {/* Compact Grid Layout for Laptop Screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+        {/* Customer Stats */}
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("customers")}
+        >
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Users className="w-4 h-4 text-primary" />
+              Customers
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total_customers}</div>
-            <p className="text-xs text-muted-foreground">Registered customers</p>
+          <CardContent className="p-3 pt-0">
+            <div className="text-2xl font-bold text-primary">{customersCount || 0}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Deliveries</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+        {/* Deliveries Stats */}
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("deliveries")}
+        >
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Truck className="w-4 h-4 text-secondary" />
+              Deliveries
+            </CardTitle>
+            <CardDescription className="mt-1">
+              <Select value={deliveryPeriod} onValueChange={setDeliveryPeriod}>
+                <SelectTrigger className="w-full h-7 text-xs" onClick={(e) => e.stopPropagation()}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="this-week">This Week</SelectItem>
+                  <SelectItem value="this-month">This Month</SelectItem>
+                  <SelectItem value="this-year">This Year</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total_deliveries}</div>
-            <p className="text-xs text-muted-foreground">Total deliveries made</p>
+          <CardContent className="p-3 pt-0">
+            <div className="text-2xl font-bold text-secondary">{deliveriesData?.length || 0}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Deliveries</CardTitle>
-            <MapPin className="h-4 w-4 text-muted-foreground" />
+        {/* Cash Payments */}
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("payments")}
+        >
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <CreditCard className="w-4 h-4 text-accent" />
+              Cash
+            </CardTitle>
+            <CardDescription className="mt-1">
+              <Select value={paymentPeriod} onValueChange={setPaymentPeriod}>
+                <SelectTrigger className="w-full h-7 text-xs" onClick={(e) => e.stopPropagation()}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="this-week">This Week</SelectItem>
+                  <SelectItem value="this-month">This Month</SelectItem>
+                  <SelectItem value="this-year">This Year</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pending_deliveries}</div>
-            <p className="text-xs text-muted-foreground">Awaiting completion</p>
+          <CardContent className="p-3 pt-0">
+            <div className="text-xl font-bold text-secondary">KSh {cashTotal.toLocaleString()}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+        {/* M-Pesa Payments */}
+        <Card 
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => onNavigateToTab?.("payments")}
+        >
+          <CardHeader className="p-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <CreditCard className="w-4 h-4 text-accent" />
+              M-Pesa
+            </CardTitle>
+            <CardDescription className="mt-1">
+              <Select value={mpesaPeriod} onValueChange={setMpesaPeriod}>
+                <SelectTrigger className="w-full h-7 text-xs" onClick={(e) => e.stopPropagation()}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="this-week">This Week</SelectItem>
+                  <SelectItem value="this-month">This Month</SelectItem>
+                  <SelectItem value="this-year">This Year</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">KES {stats.total_revenue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Revenue collected</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total_payments}</div>
-            <p className="text-xs text-muted-foreground">Payment transactions</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pending_payments}</div>
-            <p className="text-xs text-muted-foreground">Awaiting payment</p>
+          <CardContent className="p-3 pt-0">
+            <div className="text-xl font-bold text-accent">KSh {mpesaTotal.toLocaleString()}</div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Outstanding Payments - Full Width */}
+      <Card 
+        className="cursor-pointer hover:shadow-lg transition-shadow"
+        onClick={() => setOverdueDialogOpen(true)}
+      >
+        <CardHeader className="p-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <AlertCircle className="w-4 h-4 text-destructive" />
+            Outstanding Payments • Click to view details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-0">
+          <div className="flex items-center justify-between">
+            <div className="text-2xl font-bold text-destructive">KSh {outstandingTotal.toLocaleString()}</div>
+            <div className="text-sm text-muted-foreground">
+              {outstandingPayments?.length || 0} payments • {uniqueOutstandingCustomers} customers
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <OverduePaymentsDialog 
+        open={overdueDialogOpen}
+        onOpenChange={setOverdueDialogOpen}
+      />
     </div>
   );
-};
+}
