@@ -1,204 +1,174 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { ProductFormDialog } from "../forms/ProductFormDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ProductForm } from '../forms/ProductForm';
+import { Edit, Plus, Package, Eye } from 'lucide-react';
 
-export function ProductsSection() {
-  const { toast } = useToast();
-  const { userRole } = useAuth();
-  const isMasterAdmin = userRole === 'MasterAdmin';
-  const queryClient = useQueryClient();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+interface Product {
+  id: string;
+  product_name: string;
+  unit_rate: number;
+  stock_quantity: number;
+  category: string;
+  created_at: string;
+}
 
-  const { data: products, isLoading } = useQuery({
-    queryKey: ["products"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    },
-  });
+export const ProductsSection = () => {
+  const { user } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [sortField, setSortField] = useState<keyof Product | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [loading, setLoading] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  const updateMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const { error } = await supabase
-        .from("products")
-        .update({
-          name: data.name,
-          description: data.description,
-          unit_price: parseFloat(data.unit_price),
-        })
-        .eq("id", data.id);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      toast({
-        title: "Product updated",
-        description: "Product has been updated successfully.",
-      });
-      setIsFormOpen(false);
-      setEditingProduct(null);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to update product: " + error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const fetchProducts = async () => {
+    setLoading(true);
+    
+    let query = supabase
+      .from('products')
+      .select('*');
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("products")
-        .delete()
-        .eq("id", id);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      toast({
-        title: "Product deleted",
-        description: "Product has been removed successfully.",
-      });
-      setDeletingId(null);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to delete product: " + error.message,
-        variant: "destructive",
-      });
-    },
-  });
+    // Apply sorting if field is selected
+    if (sortField) {
+      query = query.order(sortField, { ascending: sortOrder === 'asc' });
+    }
 
-  const handleEdit = (product: any) => {
-    setEditingProduct(product);
-    setIsFormOpen(true);
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching products:', error);
+    } else {
+      setProducts(data || []);
+    }
+    
+    setLoading(false);
   };
 
-  const handleAdd = () => {
-    setEditingProduct(null);
-    setIsFormOpen(true);
+  useEffect(() => {
+    fetchProducts();
+  }, [sortField, sortOrder]);
+
+  const handleSort = (field: keyof Product) => {
+    if (sortField === field) {
+      // Toggle sort order if clicking same field
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Sort by new field in ascending order
+      setSortField(field);
+      setSortOrder('asc');
+    }
   };
+
+  const getSortIcon = (field: keyof Product) => {
+    if (sortField !== field) return '↕️';
+    return sortOrder === 'asc' ? '↑' : '↓';
+  };
+
+  if (loading) {
+    return <div className="text-center py-8">Loading products...</div>;
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Products</h2>
-          <p className="text-muted-foreground">Manage water products and pricing</p>
-        </div>
-        <Button className="bg-gradient-tertiary" onClick={handleAdd}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Product
-        </Button>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-foreground">Products</h2>
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Product</DialogTitle>
+            </DialogHeader>
+            <ProductForm onClose={() => setShowCreateDialog(false)} />
+          </DialogContent>
+        </Dialog>
       </div>
-      
+
       <Card>
         <CardHeader>
-          <CardTitle>Product Catalog</CardTitle>
-          <CardDescription>Configure water products and pricing</CardDescription>
+          <CardTitle>All Products</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : !products || products.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No products found. Add your first product to get started.
-            </div>
-          ) : (
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Unit Price (KES)</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('id')}
+                  >
+                    ID {getSortIcon('id')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('product_name')}
+                  >
+                    Name {getSortIcon('product_name')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('unit_rate')}
+                  >
+                    Unit Rate {getSortIcon('unit_rate')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('stock_quantity')}
+                  >
+                    Stock {getSortIcon('stock_quantity')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('category')}
+                  >
+                    Category {getSortIcon('category')}
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('created_at')}
+                  >
+                    Created {getSortIcon('created_at')}
+                  </TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {products.map((product) => (
                   <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>{product.description || "—"}</TableCell>
-                    <TableCell>{Number(product.unit_price).toLocaleString()}</TableCell>
-                    <TableCell className="text-right">
-                      {isMasterAdmin && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(product)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeletingId(product.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </>
+                    <TableCell className="font-medium">{product.id}</TableCell>
+                    <TableCell>{product.product_name}</TableCell>
+                    <TableCell>KES {product.unit_rate.toLocaleString()}</TableCell>
+                    <TableCell>{product.stock_quantity}</TableCell>
+                    <TableCell>{product.category}</TableCell>
+                    <TableCell>{new Date(product.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {user?.role === 'master_admin' ? (
+                        <Button size="sm" variant="outline">
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" disabled title="Admin cannot edit - requires Master Admin approval">
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Only
+                        </Button>
                       )}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
+          </div>
         </CardContent>
       </Card>
-
-      <ProductFormDialog
-        open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        product={editingProduct}
-      />
-
-      <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Product</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deletingId && deleteMutation.mutate(deletingId)}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
-}
+};
