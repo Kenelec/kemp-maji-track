@@ -4,9 +4,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ProductForm } from '../forms/ProductForm';
-import { Edit, Plus, Package, Eye } from 'lucide-react';
+// REMOVE FORM IMPORTS:
+// import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+// import { ProductForm } from '../forms/ProductForm';
+import { /*Edit, Plus,*/ Package, Eye } from 'lucide-react'; // Remove unused icons
 
 interface Product {
   id: string;
@@ -23,7 +24,7 @@ export const ProductsSection = () => {
   const [sortField, setSortField] = useState<keyof Product | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  // REMOVE THIS STATE: const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -76,7 +77,8 @@ export const ProductsSection = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-foreground">Products</h2>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        {/* REMOVE THE ENTIRE DIALOG BUTTON */}
+        {/* <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
@@ -89,7 +91,7 @@ export const ProductsSection = () => {
             </DialogHeader>
             <ProductForm onClose={() => setShowCreateDialog(false)} />
           </DialogContent>
-        </Dialog>
+        </Dialog> */}
       </div>
 
       <Card>
@@ -152,7 +154,7 @@ export const ProductsSection = () => {
                     <TableCell>
                       {user?.role === 'master_admin' ? (
                         <Button size="sm" variant="outline">
-                          <Edit className="w-4 h-4 mr-2" />
+                          {/* <Edit className="w-4 h-4 mr-2" /> */}
                           Edit
                         </Button>
                       ) : (
