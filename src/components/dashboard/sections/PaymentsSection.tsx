@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { PaymentForm } from '../forms/PaymentForm';
-import { Edit, Plus, CreditCard, Calendar } from 'lucide-react';
+// REMOVE FORM IMPORTS:
+// import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+// import { PaymentForm } from '../forms/PaymentForm';
+import { /*Edit, Plus,*/ CreditCard, Calendar } from 'lucide-react'; // Remove unused icons
 
 interface Payment {
   id: string;
@@ -35,7 +36,7 @@ export const PaymentsSection = () => {
   const [sortField, setSortField] = useState<keyof Payment | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  // REMOVE THIS STATE: const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -105,7 +106,8 @@ export const PaymentsSection = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-foreground">Payments</h2>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        {/* REMOVE THE ENTIRE DIALOG BUTTON */}
+        {/* <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
@@ -118,7 +120,7 @@ export const PaymentsSection = () => {
             </DialogHeader>
             <PaymentForm onClose={() => setShowCreateDialog(false)} />
           </DialogContent>
-        </Dialog>
+        </Dialog> */}
       </div>
 
       <Card>
@@ -190,8 +192,8 @@ export const PaymentsSection = () => {
                     <TableCell>{getPaymentStatusBadge(payment.status)}</TableCell>
                     <TableCell>
                       <Button size="sm" variant="outline">
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit
+                        {/* <Edit className="w-4 h-4 mr-2" /> */}
+                        View
                       </Button>
                     </TableCell>
                   </TableRow>
