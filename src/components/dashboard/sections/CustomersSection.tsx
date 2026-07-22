@@ -4,9 +4,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { CustomerForm } from '../forms/CustomerForm';
-import { Edit, Plus, User, MapPin, Phone, Mail } from 'lucide-react';
+// REMOVE THIS IMPORT: import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+// REMOVE THIS IMPORT: import { CustomerForm } from '../forms/CustomerForm';
+import { Edit, /*Plus,*/ User, MapPin, Phone, Mail } from 'lucide-react'; // Remove Plus from import
 
 interface Customer {
   id: string;
@@ -24,7 +24,7 @@ export const CustomersSection = () => {
   const [sortField, setSortField] = useState<keyof Customer | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  // REMOVE THIS STATE: const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -77,7 +77,8 @@ export const CustomersSection = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-foreground">Customers</h2>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        {/* REMOVE THE ENTIRE DIALOG BUTTON */}
+        {/* <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
@@ -90,7 +91,7 @@ export const CustomersSection = () => {
             </DialogHeader>
             <CustomerForm onClose={() => setShowCreateDialog(false)} />
           </DialogContent>
-        </Dialog>
+        </Dialog> */}
       </div>
 
       <Card>
