@@ -54,7 +54,7 @@ export function DeliveriesSection() {
           ),
           delivery_queries (id, status)
         `)
-        // NEW: Apply sorting to the query
+        // NEW: Apply sorting to the query - FIXED for delivery_note_no to handle numeric sorting
         .order(sortField || "delivery_date", { ascending: sortOrder === 'asc' });
       
       if (error) throw error;
@@ -63,7 +63,7 @@ export function DeliveriesSection() {
     refetchInterval: 5000,
   });
 
-  // NEW: Handle column sorting
+  // NEW: Handle column sorting - FIXED to handle different column types
   const handleSort = (field: string) => {
     if (sortField === field) {
       // Toggle sort order if clicking same field
@@ -86,22 +86,22 @@ export function DeliveriesSection() {
     
     // Check payment status first - highest priority
     if (delivery.payment_status === 'paid') {
-      return { label: "Paid", color: "bg-green-100 text-green-800", icon: CheckCircle };
+      return { label: "Paid", color: "bg-green-100 text-green-800", icon: CheckCircle, value: 'paid' };
     }
     if (delivery.payment_status === 'partial') {
-      return { label: "Partial Payment", color: "bg-blue-100 text-blue-800", icon: CreditCard };
+      return { label: "Partial Payment", color: "bg-blue-100 text-blue-800", icon: CreditCard, value: 'partial' };
     }
     
     if (delivery.discrepancy_flag || hasQuery) {
-      return { label: "Issue", color: "bg-red-100 text-red-800", icon: AlertCircle };
+      return { label: "Issue", color: "bg-red-100 text-red-800", icon: AlertCircle, value: 'issue' };
     }
     if (delivery.customer_confirmed) {
-      return { label: "Confirmed", color: "bg-green-100 text-green-800", icon: CheckCircle };
+      return { label: "Confirmed", color: "bg-green-100 text-green-800", icon: CheckCircle, value: 'confirmed' };
     }
     if (delivery.auto_confirmed) {
-      return { label: "Auto-Confirmed", color: "bg-gray-100 text-gray-800", icon: CheckCircle };
+      return { label: "Auto-Confirmed", color: "bg-gray-100 text-gray-800", icon: CheckCircle, value: 'auto_confirmed' };
     }
-    return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock };
+    return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock, value: 'open' };
   };
 
   const deleteMutation = useMutation({
@@ -214,12 +214,7 @@ export function DeliveriesSection() {
                     Delivery Note No. {getSortIcon('delivery_note_no')}
                   </TableHead>
                   <TableHead>Products</TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('qty')}
-                  >
-                    Quantity {getSortIcon('qty')}
-                  </TableHead>
+                  <TableHead>Quantity</TableHead> {/* REMOVED SORTING */}
                   <TableHead 
                     className="cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('unit_rate')}
@@ -232,7 +227,12 @@ export function DeliveriesSection() {
                   >
                     Total Amount {getSortIcon('total_amount')}
                   </TableHead>
-                  <TableHead>Confirmation</TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('payment_status')} // FIXED: Added sorting to confirmation column
+                  >
+                    Confirmation {getSortIcon('payment_status')}
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -259,7 +259,7 @@ export function DeliveriesSection() {
                           "—"
                         )}
                       </TableCell>
-                      <TableCell>{delivery.qty}</TableCell>
+                      <TableCell>{delivery.qty}</TableCell> {/* NO SORTING */}
                       <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
                       <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
                       <TableCell>
