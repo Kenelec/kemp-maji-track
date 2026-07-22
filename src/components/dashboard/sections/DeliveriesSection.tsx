@@ -260,119 +260,118 @@ export function DeliveriesSection() {
           ) : (
             <div 
               ref={tableContainerRef}
-              className="overflow-x-auto relative"
-              style={{ maxHeight: '60vh' }}
+              className="overflow-x-auto"
             >
-              {/* ABSOLUTE FIXED HEADER */}
-              <div 
-                className="absolute top-0 left-0 right-0 bg-background z-[100] shadow-sm border-b"
-                style={{ minHeight: '48px' }} // Adjust based on your header height
-              >
-                <Table className="min-w-[1200px]">
-                  <TableHeader className="bg-background">
-                    <TableRow>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[200]"
-                        onClick={() => handleSort('customers.customer_name')}
-                      >
-                        Customer {getSortIcon('customers.customer_name')}
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('delivery_date')}
-                      >
-                        Delivery Date {getSortIcon('delivery_date')}
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('drivers.name')}
-                      >
-                        Driver {getSortIcon('drivers.name')}
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('delivery_note_no')}
-                      >
-                        Delivery Note No. {getSortIcon('delivery_note_no')}
-                      </TableHead>
-                      <TableHead>Products</TableHead>
-                      <TableHead>Quantity</TableHead> {/* REMOVED SORTING */}
-                      <TableHead 
-                        className="cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('unit_rate')}
-                      >
-                        Unit Rate {getSortIcon('unit_rate')}
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('total_amount')}
-                      >
-                        Total Amount {getSortIcon('total_amount')}
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('payment_status')} // FIXED: Added sorting to confirmation column
-                      >
-                        Confirmation {getSortIcon('payment_status')}
-                      </TableHead>
-                      <TableHead className="text-right sticky right-0 bg-background z-[200]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                </Table>
-              </div>
-              
-              {/* SCROLLABLE DATA BODY */}
-              <div className="pt-12"> {/* Add padding to account for fixed header */}
-                <Table className="min-w-[1200px]">
-                  <TableBody>
-                    {sortedDeliveries.map((delivery) => {
-                      const confirmStatus = getConfirmationStatus(delivery);
-                      const StatusIcon = confirmStatus.icon;
-                      return (
-                        <TableRow key={delivery.id}>
-                          <TableCell className="font-medium sticky left-0 bg-background z-[150]">
-                            {delivery.customers?.customer_name || "Unknown"}
-                          </TableCell>
-                          <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
-                          <TableCell>
-                            {(delivery as any).drivers?.name || "—"}
-                          </TableCell>
-                          <TableCell>{delivery.delivery_note_no || "—"}</TableCell>
-                          <TableCell>
-                            {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
-                              delivery.delivery_items.map((item: any, idx: number) => (
-                                <div key={idx}>{item.product_name}</div>
-                              ))
-                            ) : (
-                              "—"
-                            )}
-                          </TableCell>
-                          <TableCell>{delivery.qty}</TableCell> {/* NO SORTING */}
-                          <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
-                          <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge className={confirmStatus.color}>
-                              <StatusIcon className="w-3 h-3 mr-1" />
-                              {confirmStatus.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right sticky right-0 bg-background z-[150]">
-                            {isMasterAdmin && (
-                              <div className="flex justify-end gap-2">
-                                <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
-                                  <Pencil className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDelete(delivery.id)}>
-                                  <Trash2 className="w-4 h-4 text-destructive" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              {/* NEW: Wrapper div with specific height and overflow */}
+              <div className="h-[60vh] overflow-y-auto">
+                {/* NEW: Header with guaranteed sticky positioning */}
+                <div className="sticky top-0 z-[100] bg-background">
+                  <Table className="min-w-[1200px]">
+                    <TableHeader className="bg-background">
+                      <TableRow>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[200]"
+                          onClick={() => handleSort('customers.customer_name')}
+                        >
+                          Customer {getSortIcon('customers.customer_name')}
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('delivery_date')}
+                        >
+                          Delivery Date {getSortIcon('delivery_date')}
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('drivers.name')}
+                        >
+                          Driver {getSortIcon('drivers.name')}
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('delivery_note_no')}
+                        >
+                          Delivery Note No. {getSortIcon('delivery_note_no')}
+                        </TableHead>
+                        <TableHead>Products</TableHead>
+                        <TableHead>Quantity</TableHead> {/* REMOVED SORTING */}
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('unit_rate')}
+                        >
+                          Unit Rate {getSortIcon('unit_rate')}
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('total_amount')}
+                        >
+                          Total Amount {getSortIcon('total_amount')}
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100"
+                          onClick={() => handleSort('payment_status')} // FIXED: Added sorting to confirmation column
+                        >
+                          Confirmation {getSortIcon('payment_status')}
+                        </TableHead>
+                        <TableHead className="text-right sticky right-0 bg-background z-[200]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                  </Table>
+                </div>
+                
+                {/* NEW: Data rows with scrolling */}
+                <div className="mt-0">
+                  <Table className="min-w-[1200px]">
+                    <TableBody>
+                      {sortedDeliveries.map((delivery) => {
+                        const confirmStatus = getConfirmationStatus(delivery);
+                        const StatusIcon = confirmStatus.icon;
+                        return (
+                          <TableRow key={delivery.id}>
+                            <TableCell className="font-medium sticky left-0 bg-background z-[150]">
+                              {delivery.customers?.customer_name || "Unknown"}
+                            </TableCell>
+                            <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
+                            <TableCell>
+                              {(delivery as any).drivers?.name || "—"}
+                            </TableCell>
+                            <TableCell>{delivery.delivery_note_no || "—"}</TableCell>
+                            <TableCell>
+                              {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
+                                delivery.delivery_items.map((item: any, idx: number) => (
+                                  <div key={idx}>{item.product_name}</div>
+                                ))
+                              ) : (
+                                "—"
+                              )}
+                            </TableCell>
+                            <TableCell>{delivery.qty}</TableCell> {/* NO SORTING */}
+                            <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
+                            <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
+                            <TableCell>
+                              <Badge className={confirmStatus.color}>
+                                <StatusIcon className="w-3 h-3 mr-1" />
+                                {confirmStatus.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right sticky right-0 bg-background z-[150]">
+                              {isMasterAdmin && (
+                                <div className="flex justify-end gap-2">
+                                  <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" onClick={() => handleDelete(delivery.id)}>
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </div>
           )}
