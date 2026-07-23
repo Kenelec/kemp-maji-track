@@ -44,7 +44,7 @@ export function DeliveriesSection() {
   // NEW: Column widths state
   const [columnWidths, setColumnWidths] = useState({
     customer: 150,
-    date: 100,
+    date: 120, // Increased width for full date
     driver: 120,
     note: 100,
     products: 120,
@@ -597,7 +597,7 @@ export function DeliveriesSection() {
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.date}px` }}
                             >
-                              {format(new Date(delivery.delivery_date), "dd/MM")}
+                              {format(new Date(delivery.delivery_date), "dd/MM/yyyy")} {/* FIXED: Full date format */}
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
@@ -659,10 +659,20 @@ export function DeliveriesSection() {
                             >
                               {isMasterAdmin && (
                                 <div className="flex justify-center gap-1">
-                                  <Button variant="ghost" size="xs" onClick={() => handleEdit(delivery)}>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="xs" 
+                                    onClick={() => handleEdit(delivery)}
+                                    className="z-[3000]" // Ensure high z-index for modal
+                                  >
                                     <Pencil className="w-3 h-3" />
                                   </Button>
-                                  <Button variant="ghost" size="xs" onClick={() => handleDelete(delivery.id)}>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="xs" 
+                                    onClick={() => handleDelete(delivery.id)}
+                                    className="z-[3000]" // Ensure high z-index for modal
+                                  >
                                     <Trash2 className="w-3 h-3" />
                                   </Button>
                                 </div>
@@ -680,14 +690,21 @@ export function DeliveriesSection() {
         </CardContent>
       </Card>
 
-      <DeliveryFormDialog
-        open={isFormOpen}
-        onOpenChange={(open) => {
-          setIsFormOpen(open);
-          if (!open) setEditingDelivery(null);
-        }}
-        editData={editingDelivery}
-      />
+      {/* ENHANCED MODAL FOR EDIT/CREATE FORM */}
+      {isFormOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DeliveryFormDialog
+              open={isFormOpen}
+              onOpenChange={(open) => {
+                setIsFormOpen(open);
+                if (!open) setEditingDelivery(null);
+              }}
+              editData={editingDelivery}
+            />
+          </div>
+        </div>
+      )}
 
       <ExcelUploadDialog
         open={isExcelUploadOpen}
