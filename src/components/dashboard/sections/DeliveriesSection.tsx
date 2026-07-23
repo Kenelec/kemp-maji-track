@@ -853,7 +853,7 @@ export function DeliveriesSection() {
                                 <div className="flex justify-center gap-1">
                                   <Button 
                                     variant="ghost" 
-                                    size="xs" 
+                                    size="sm" 
                                     onClick={() => handleEdit(delivery)}
                                     className="z-[3000]"
                                   >
