@@ -689,7 +689,7 @@ export function DeliveriesSection() {
         </CardContent>
       </Card>
 
-      {/* CUSTOM MODAL WITH SOLID BACKGROUND - NO TRANSPARENCY */}
+      {/* CUSTOM MODAL FOR EDIT FORM - SOLID BACKGROUND */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -709,13 +709,86 @@ export function DeliveriesSection() {
                 </button>
               </div>
               
-              {/* Simple form placeholder - replace with actual form fields */}
+              {/* Display delivery data for editing */}
               <div className="space-y-4">
-                <p className="text-center py-8 text-gray-500">
-                  Delivery form would appear here. Replace this with your actual form fields.
-                </p>
+                {editingDelivery ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Customer</label>
+                      <input 
+                        type="text" 
+                        className="w-full p-2 border rounded"
+                        defaultValue={editingDelivery.customers?.customer_name || ""}
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Delivery Date</label>
+                      <input 
+                        type="date" 
+                        className="w-full p-2 border rounded"
+                        defaultValue={editingDelivery.delivery_date.split('T')[0]}
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Delivery Note No</label>
+                      <input 
+                        type="text" 
+                        className="w-full p-2 border rounded"
+                        defaultValue={editingDelivery.delivery_note_no || ""}
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Quantity</label>
+                      <input 
+                        type="number" 
+                        className="w-full p-2 border rounded"
+                        defaultValue={editingDelivery.qty || 0}
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Unit Rate</label>
+                      <input 
+                        type="number" 
+                        className="w-full p-2 border rounded"
+                        defaultValue={editingDelivery.unit_rate || 0}
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Total Amount</label>
+                      <input 
+                        type="number" 
+                        className="w-full p-2 border rounded"
+                        defaultValue={editingDelivery.total_amount || 0}
+                        readOnly
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-1">Products</label>
+                      <div className="border rounded p-2 max-h-20 overflow-y-auto">
+                        {editingDelivery.delivery_items && editingDelivery.delivery_items.length > 0 ? (
+                          editingDelivery.delivery_items.map((item: any, idx: number) => (
+                            <div key={idx} className="text-sm">
+                              {item.product_name} - Qty: {item.quantity}
+                            </div>
+                          ))
+                        ) : (
+                          <div>No products</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-center py-8 text-gray-500">
+                    Create new delivery form would appear here.
+                  </p>
+                )}
                 
-                <div className="flex justify-end space-x-2">
+                <div className="flex justify-end space-x-2 mt-6">
                   <Button 
                     variant="outline" 
                     onClick={() => {
@@ -735,36 +808,56 @@ export function DeliveriesSection() {
         </div>
       )}
 
+      {/* CUSTOM DELETE DIALOG - SOLID BACKGROUND */}
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-md">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Delete Delivery</h3>
+                <button 
+                  onClick={() => setDeleteDialogOpen(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <p>
+                  {hasLinkedPayments 
+                    ? "This delivery has linked payment records. Please delete the associated payments first before deleting this delivery." 
+                    : "Are you sure you want to delete this delivery? This action cannot be undone."}
+                </p>
+                
+                <div className="flex justify-end space-x-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setDeleteDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  {!hasLinkedPayments && (
+                    <Button 
+                      onClick={confirmDelete} 
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ExcelUploadDialog
         open={isExcelUploadOpen}
         onOpenChange={setIsExcelUploadOpen}
         type="deliveries"
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["deliveries"] })}
       />
-
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {hasLinkedPayments ? "Cannot Delete Delivery" : "Delete Delivery"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {hasLinkedPayments 
-                ? "This delivery has linked payment records. Please delete the associated payments first before deleting this delivery."
-                : "Are you sure you want to delete this delivery? This action cannot be undone."
-              }
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            {!hasLinkedPayments && (
-              <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
-                Delete
-              </AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
