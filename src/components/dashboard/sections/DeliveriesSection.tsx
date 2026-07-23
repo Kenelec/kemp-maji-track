@@ -24,7 +24,7 @@ import {
 
 export function DeliveriesSection() {
   const { toast } = useToast();
-  const { userRole } = useAuth();
+  const { userRole, user } = useAuth();
   const isMasterAdmin = userRole === 'MasterAdmin';
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -505,6 +505,10 @@ export function DeliveriesSection() {
   // NEW: Create delivery mutation with proper item/payment handling
   const createDeliveryMutation = useMutation({
     mutationFn: async (deliveryData: any) => {
+      if (!user?.id) {
+        throw new Error('You must be logged in to create a delivery.');
+      }
+
       const validItems = buildValidItems(deliveryData.delivery_items || []);
       const totals = validateDeliveryItems(validItems);
 
@@ -519,6 +523,7 @@ export function DeliveriesSection() {
           total_amount: totals.totalAmount,
           driver_id: deliveryData.driver_id || null,
           delivery_status: 'delivered',
+          created_by_user: user.id,
         }])
         .select()
         .single();
