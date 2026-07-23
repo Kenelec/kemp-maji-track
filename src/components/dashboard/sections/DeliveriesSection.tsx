@@ -9,6 +9,7 @@ import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle, CreditCa
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
+import { NotificationService } from "@/services/notificationService";
 import { format, startOfMonth, endOfMonth, subMonths, addMonths, format as formatDate } from "date-fns";
 import {
   AlertDialog,
@@ -23,7 +24,7 @@ import {
 
 export function DeliveriesSection() {
   const { toast } = useToast();
-  const { userRole } = useAuth();
+  const { userRole, user } = useAuth();
   const isMasterAdmin = userRole === 'MasterAdmin';
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -57,14 +58,31 @@ export function DeliveriesSection() {
     const loadData = async () => {
       setLoadingProducts(true);
       try {
-        const [{ data: customersData }, { data: productsData }, { data: driversData }] = await Promise.all([
-          supabase.from('customers').select('*'),
-          supabase.from('products').select('*'),
-          supabase.from('drivers').select('*')
+        const [{ data: customersData }, { data: productsData }, { data: driversData }, { data: recentItemPrices }] = await Promise.all([
+          supabase.from('customers').select('*').order('customer_name'),
+          supabase.from('products').select('*').order('name'),
+          supabase.from('drivers').select('*').order('name'),
+          supabase.from('delivery_items').select('product_id, unit_price').gt('unit_price', 0)
         ]);
+
+        const fallbackPrices = new Map<string, number>();
+        (recentItemPrices || []).forEach((item: any) => {
+          const price = Number(item.unit_price || 0);
+          if (item.product_id && price > 0 && !fallbackPrices.has(item.product_id)) {
+            fallbackPrices.set(item.product_id, price);
+          }
+        });
+
+        const productsWithPrices = (productsData || []).map((product: any) => {
+          const productPrice = Number(product.unit_price || 0);
+          return {
+            ...product,
+            effective_unit_price: productPrice > 0 ? productPrice : fallbackPrices.get(product.id) || 0,
+          };
+        });
         
         setCustomers(customersData || []);
-        setProducts(productsData || []);
+        setProducts(productsWithPrices);
         setDrivers(driversData || []);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -94,7 +112,13 @@ export function DeliveriesSection() {
   const handleDeliveryItemChange = (index: number, field: string, value: any) => {
     setFormData(prev => {
       const newItems = [...prev.delivery_items];
-      newItems[index] = { ...newItems[index], [field]: value };
+      const nextItem = { ...newItems[index], [field]: value };
+      if (field === 'quantity' || field === 'unit_price') {
+        const quantity = Number(nextItem.quantity || 0);
+        const unitPrice = Number(nextItem.unit_price || 0);
+        nextItem.total_price = calculateItemTotal(quantity, unitPrice);
+      }
+      newItems[index] = nextItem;
       return { ...prev, delivery_items: newItems };
     });
   };
@@ -117,6 +141,63 @@ export function DeliveriesSection() {
     }));
   };
 
+  const getEmptyFormData = () => ({
+    id: '',
+    customer_id: '',
+    delivery_date: new Date().toISOString().split('T')[0],
+    delivery_note_no: '',
+    qty: 0,
+    unit_rate: 0,
+    total_amount: 0,
+    delivery_items: [{
+      id: Date.now(),
+      product_id: '',
+      product_name: '',
+      quantity: 1,
+      unit_price: 0,
+      total_price: 0,
+    }],
+    driver_id: ''
+  });
+
+  const buildValidItems = (deliveryItems: any[]) => deliveryItems
+    .filter((item: any) => item.product_id)
+    .map((item: any) => {
+      const selectedProduct = products.find((product: any) => product.id === item.product_id);
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return {
+        ...item,
+        product_name: selectedProduct?.name || item.product_name || '',
+        quantity,
+        unit_price: unitPrice,
+        total_price: calculateItemTotal(quantity, unitPrice),
+      };
+    });
+
+  const buildDeliveryItemsPayload = (deliveryId: string, customerId: string, items: any[]) => items.map((item: any) => ({
+    delivery_id: deliveryId,
+    customer_id: customerId,
+    product_id: item.product_id,
+    product_name: item.product_name,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    total_price: item.total_price,
+  }));
+
+  const validateDeliveryItems = (items: any[]) => {
+    if (items.length === 0) {
+      throw new Error('Please select at least one product before saving the delivery.');
+    }
+
+    const totals = getFormTotals(items);
+    if (totals.totalQty <= 0 || totals.totalAmount <= 0) {
+      throw new Error('Please enter quantity and rate for each product before saving.');
+    }
+
+    return totals;
+  };
+
   // NEW: Remove delivery item
   const removeDeliveryItem = (index: number) => {
     setFormData(prev => ({
@@ -127,13 +208,81 @@ export function DeliveriesSection() {
 
   // NEW: Calculate total amount based on items
   useEffect(() => {
-    const total = formData.delivery_items.reduce((sum, item) => sum + (item.total_price || 0), 0);
-    setFormData(prev => ({ ...prev, total_amount: total }));
+    const validItems = formData.delivery_items.filter((item: any) => item.product_id);
+    const totalQty = validItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+    const totalAmount = validItems.reduce((sum: number, item: any) => {
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return sum + calculateItemTotal(quantity, unitPrice);
+    }, 0);
+    const firstUnitRate = Number(validItems[0]?.unit_price || 0);
+
+    setFormData(prev => ({
+      ...prev,
+      qty: totalQty,
+      unit_rate: firstUnitRate,
+      total_amount: totalAmount,
+    }));
   }, [formData.delivery_items]);
 
   // NEW: Calculate individual item total when quantity or price changes
   const calculateItemTotal = (quantity: number, unit_price: number) => {
     return quantity * unit_price;
+  };
+
+  const getProductLabel = (product: any) => {
+    const description = product.description ? ` - ${product.description}` : '';
+    return `${product.name}${description}`;
+  };
+
+  const getProductPrice = (product: any) => {
+    const savedPrice = Number(product?.unit_price || 0);
+    const fallbackPrice = Number(product?.effective_unit_price || 0);
+    return savedPrice > 0 ? savedPrice : fallbackPrice;
+  };
+
+  const getFormTotals = (items = formData.delivery_items) => {
+    const validItems = items.filter((item: any) => item.product_id);
+    const totalQty = validItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+    const totalAmount = validItems.reduce((sum: number, item: any) => {
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return sum + calculateItemTotal(quantity, unitPrice);
+    }, 0);
+    const firstUnitRate = Number(validItems[0]?.unit_price || 0);
+    return { totalQty, totalAmount, firstUnitRate };
+  };
+
+  const normalizeDeliveryItems = (delivery: any) => {
+    const sourceItems = Array.isArray(delivery.delivery_items) ? delivery.delivery_items : [];
+
+    if (sourceItems.length === 0) {
+      return [{
+        id: `fallback-${delivery.id}`,
+        product_id: '',
+        product_name: '',
+        quantity: Number(delivery.qty || 1),
+        unit_price: Number(delivery.unit_rate || 0),
+        total_price: Number(delivery.total_amount || 0),
+      }];
+    }
+
+    return sourceItems.map((item: any) => {
+      const matchedProduct = products.find((product: any) => (
+        product.id === item.product_id ||
+        product.name?.trim().toLowerCase() === item.product_name?.trim().toLowerCase()
+      ));
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return {
+        ...item,
+        product_id: matchedProduct?.id || item.product_id || '',
+        product_name: matchedProduct?.name || item.product_name || '',
+        quantity,
+        unit_price: unitPrice,
+        total_price: Number(item.total_price || calculateItemTotal(quantity, unitPrice)),
+      };
+    });
   };
 
   // NEW: Sorting state
@@ -353,9 +502,88 @@ export function DeliveriesSection() {
     return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock };
   };
 
+  // NEW: Create delivery mutation with proper item/payment handling
+  const createDeliveryMutation = useMutation({
+    mutationFn: async (deliveryData: any) => {
+      if (!user?.id) {
+        throw new Error('You must be logged in to create a delivery.');
+      }
+
+      const validItems = buildValidItems(deliveryData.delivery_items || []);
+      const totals = validateDeliveryItems(validItems);
+
+      const { data: newDelivery, error: deliveryError } = await supabase
+        .from('deliveries')
+        .insert([{
+          customer_id: deliveryData.customer_id,
+          delivery_date: deliveryData.delivery_date,
+          delivery_note_no: deliveryData.delivery_note_no,
+          qty: totals.totalQty,
+          unit_rate: totals.firstUnitRate,
+          total_amount: totals.totalAmount,
+          driver_id: deliveryData.driver_id || null,
+          delivery_status: 'delivered',
+          created_by_user: user.id,
+        }])
+        .select()
+        .single();
+
+      if (deliveryError) throw deliveryError;
+
+      const { error: itemError } = await supabase
+        .from('delivery_items')
+        .insert(buildDeliveryItemsPayload(newDelivery.id, deliveryData.customer_id, validItems));
+
+      if (itemError) throw itemError;
+
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 7);
+
+      await supabase
+        .from('payments')
+        .insert([{
+          customer_id: deliveryData.customer_id,
+          delivery_id: newDelivery.id,
+          amount: 0,
+          due_date: dueDate.toISOString().split('T')[0],
+          status: 'pending',
+        }]);
+
+      try {
+        await NotificationService.sendDeliveryNotification(newDelivery.id);
+      } catch (notificationError) {
+        console.error('Failed to send delivery notification:', notificationError);
+      }
+
+      return newDelivery;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      toast({
+        title: "Delivery created",
+        description: "Delivery has been created successfully.",
+      });
+      setIsFormOpen(false);
+      setEditingDelivery(null);
+      setFormData(getEmptyFormData());
+    },
+    onError: (error: any) => {
+      console.error('Create error:', error);
+      toast({
+        title: "Error",
+        description: `Failed to create delivery: ${error.message || 'Unknown error'}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   // NEW: Update delivery mutation with proper error handling
   const updateDeliveryMutation = useMutation({
     mutationFn: async (deliveryData: any) => {
+      const validItems = buildValidItems(deliveryData.delivery_items || []);
+      const totals = validateDeliveryItems(validItems);
+
       // Update delivery record
       const { data: deliveryDataResult, error: deliveryError } = await supabase
         .from('deliveries')
@@ -363,10 +591,16 @@ export function DeliveriesSection() {
           customer_id: deliveryData.customer_id,
           delivery_date: deliveryData.delivery_date,
           delivery_note_no: deliveryData.delivery_note_no,
-          qty: deliveryData.qty,
-          unit_rate: deliveryData.unit_rate,
-          total_amount: deliveryData.total_amount,
-          driver_id: deliveryData.driver_id
+          qty: totals.totalQty,
+          unit_rate: totals.firstUnitRate,
+          total_amount: totals.totalAmount,
+          driver_id: deliveryData.driver_id || null,
+          customer_confirmed: false,
+          confirmed_at: null,
+          auto_confirmed: false,
+          discrepancy_flag: false,
+          discrepancy_notes: null,
+          confirmation_deadline: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
         })
         .eq('id', deliveryData.id);
 
@@ -383,22 +617,19 @@ export function DeliveriesSection() {
         if (deleteError) throw deleteError;
         
         // Then insert new items if any exist
-        if (deliveryData.delivery_items.length > 0) {
-          const itemsToInsert = deliveryData.delivery_items.map((item: any) => ({
-            delivery_id: deliveryData.id,
-            product_id: item.product_id,
-            product_name: item.product_name,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            total_price: item.total_price
-          }));
-          
+        if (validItems.length > 0) {
           const { error: itemError } = await supabase
             .from('delivery_items')
-            .insert(itemsToInsert);
+            .insert(buildDeliveryItemsPayload(deliveryData.id, deliveryData.customer_id, validItems));
             
           if (itemError) throw itemError;
         }
+      }
+
+      try {
+        await NotificationService.sendDeliveryNotification(deliveryData.id);
+      } catch (notificationError) {
+        console.error('Failed to send delivery update notification:', notificationError);
       }
       
       return deliveryDataResult;
@@ -411,6 +642,7 @@ export function DeliveriesSection() {
       });
       setIsFormOpen(false);
       setEditingDelivery(null);
+      setFormData(getEmptyFormData());
     },
     onError: (error: any) => {
       console.error('Update error:', error);
@@ -449,16 +681,19 @@ export function DeliveriesSection() {
   });
 
   const handleEdit = (delivery: any) => {
+    const deliveryItems = normalizeDeliveryItems(delivery);
+    const totals = getFormTotals(deliveryItems);
+
     // Populate form data with delivery details including existing items
     setFormData({
       id: delivery.id,
       customer_id: delivery.customer_id || '',
       delivery_date: delivery.delivery_date || '',
       delivery_note_no: delivery.delivery_note_no || '',
-      qty: delivery.qty || 0,
-      unit_rate: delivery.unit_rate || 0,
-      total_amount: delivery.total_amount || 0,
-      delivery_items: delivery.delivery_items || [],
+      qty: totals.totalQty || Number(delivery.qty || 0),
+      unit_rate: totals.firstUnitRate || Number(delivery.unit_rate || 0),
+      total_amount: totals.totalAmount || Number(delivery.total_amount || 0),
+      delivery_items: deliveryItems,
       driver_id: delivery.driver_id || ''
     });
     setEditingDelivery(delivery);
@@ -487,7 +722,19 @@ export function DeliveriesSection() {
   // NEW: Handle form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateDeliveryMutation.mutate(formData);
+    const totals = getFormTotals();
+    const payload = {
+      ...formData,
+      qty: totals.totalQty,
+      unit_rate: totals.firstUnitRate,
+      total_amount: totals.totalAmount,
+    };
+
+    if (editingDelivery && formData.id) {
+      updateDeliveryMutation.mutate(payload);
+    } else {
+      createDeliveryMutation.mutate(payload);
+    }
   };
 
   // NEW: Reference for table container
@@ -509,7 +756,11 @@ export function DeliveriesSection() {
             <Upload className="w-3 h-3 mr-1" />
             Import
           </Button>
-          <Button className="bg-gradient-primary" size="sm" onClick={() => setIsFormOpen(true)}>
+          <Button className="bg-gradient-primary" size="sm" onClick={() => {
+            setEditingDelivery(null);
+            setFormData(getEmptyFormData());
+            setIsFormOpen(true);
+          }}>
             <Plus className="w-3 h-3 mr-1" />
             New
           </Button>
@@ -961,39 +1212,6 @@ export function DeliveriesSection() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Quantity</label>
-                      <input
-                        type="number"
-                        name="qty"
-                        value={formData.qty}
-                        onChange={handleInputChange}
-                        min="0"
-                        className="w-full p-2 border rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Unit Rate</label>
-                      <input
-                        type="number"
-                        name="unit_rate"
-                        value={formData.unit_rate}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        className="w-full p-2 border rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Total Amount</label>
-                      <input
-                        type="number"
-                        name="total_amount"
-                        value={formData.total_amount}
-                        readOnly
-                        className="w-full p-2 border rounded bg-gray-100"
-                      />
-                    </div>
                   </div>
 
                   <div>
@@ -1010,14 +1228,14 @@ export function DeliveriesSection() {
                     
                     <div className="space-y-3">
                       {formData.delivery_items.map((item, index) => (
-                        <div key={item.id || index} className="grid grid-cols-1 md:grid-cols-4 gap-2 border p-2 rounded">
+                        <div key={item.id || index} className="grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_90px_120px_120px_32px] gap-2 border p-2 rounded items-end">
                           <div>
                             <label className="block text-xs mb-1">Product</label>
                             <select
                               value={item.product_id || ''}
                               onChange={(e) => {
                                 const selectedProduct = products.find(p => p.id === e.target.value);
-                                const newPrice = selectedProduct?.unit_price || 0;
+                                const newPrice = getProductPrice(selectedProduct);
                                 const newQty = item.quantity || 1;
                                 setFormData(prev => {
                                   const newItems = [...prev.delivery_items];
@@ -1034,10 +1252,12 @@ export function DeliveriesSection() {
                               }}
                               className="w-full p-2 border rounded text-sm"
                             >
-                              <option value="">Select Product</option>
+                                <option value="">
+                                  {item.product_name ? `Unmatched: ${item.product_name}` : 'Select Product'}
+                                </option>
                               {products.map(product => (
                                 <option key={product.id} value={product.id}>
-                                  {product.name}
+                                  {getProductLabel(product)}
                                 </option>
                               ))}
                             </select>
@@ -1050,7 +1270,6 @@ export function DeliveriesSection() {
                               onChange={(e) => {
                                 const newQuantity = Number(e.target.value);
                                 handleDeliveryItemChange(index, 'quantity', newQuantity);
-                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(newQuantity, item.unit_price || 0));
                               }}
                               min="1"
                               className="w-full p-2 border rounded text-sm"
@@ -1064,33 +1283,54 @@ export function DeliveriesSection() {
                               onChange={(e) => {
                                 const newPrice = Number(e.target.value);
                                 handleDeliveryItemChange(index, 'unit_price', newPrice);
-                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(item.quantity || 1, newPrice));
                               }}
                               min="0"
                               step="0.01"
                               className="w-full p-2 border rounded text-sm"
                             />
                           </div>
-                          <div className="flex items-end">
-                            <div className="w-full">
-                              <label className="block text-xs mb-1">Total</label>
-                              <input
-                                type="number"
-                                value={item.total_price}
-                                readOnly
-                                className="w-full p-2 border rounded text-sm bg-gray-100"
-                              />
-                            </div>
+                          <div>
+                            <label className="block text-xs mb-1">Total</label>
+                            <input
+                              type="number"
+                              value={Number(item.total_price || 0)}
+                              readOnly
+                              className="w-full p-2 border rounded text-sm bg-gray-100"
+                            />
+                          </div>
+                          <div className="flex items-center justify-center pb-2">
                             <button
                               type="button"
                               onClick={() => removeDeliveryItem(index)}
-                              className="ml-2 text-red-600 hover:text-red-800"
+                              className="text-red-600 hover:text-red-800"
+                              aria-label="Remove product"
                             >
                               ×
                             </button>
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded border bg-gray-50 p-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Total Quantity</label>
+                      <input
+                        type="number"
+                        value={formData.qty}
+                        readOnly
+                        className="w-full p-2 border rounded bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Total Amount</label>
+                      <input
+                        type="number"
+                        value={formData.total_amount}
+                        readOnly
+                        className="w-full p-2 border rounded bg-white"
+                      />
                     </div>
                   </div>
 
@@ -1101,6 +1341,7 @@ export function DeliveriesSection() {
                       onClick={() => {
                         setIsFormOpen(false);
                         setEditingDelivery(null);
+                        setFormData(getEmptyFormData());
                       }}
                     >
                       Cancel
@@ -1108,10 +1349,10 @@ export function DeliveriesSection() {
                     <Button 
                       type="submit"
                       className="bg-blue-600 hover:bg-blue-700"
-                      disabled={updateDeliveryMutation.isPending}
+                      disabled={updateDeliveryMutation.isPending || createDeliveryMutation.isPending}
                     >
-                      {updateDeliveryMutation.isPending 
-                        ? 'Updating...' 
+                      {updateDeliveryMutation.isPending || createDeliveryMutation.isPending 
+                        ? (editingDelivery ? 'Updating...' : 'Creating...') 
                         : editingDelivery ? 'Update Delivery' : 'Create Delivery'}
                     </Button>
                   </div>
