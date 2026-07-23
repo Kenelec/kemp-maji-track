@@ -50,23 +50,36 @@ export function DeliveriesSection() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
   // NEW: Load dependent data
   useEffect(() => {
     const loadData = async () => {
-      const [{ data: customersData }, { data: productsData }, { data: driversData }] = await Promise.all([
-        supabase.from('customers').select('*'),
-        supabase.from('products').select('*'),
-        supabase.from('drivers').select('*')
-      ]);
-      
-      setCustomers(customersData || []);
-      setProducts(productsData || []);
-      setDrivers(driversData || []);
+      setLoadingProducts(true);
+      try {
+        const [{ data: customersData }, { data: productsData }, { data: driversData }] = await Promise.all([
+          supabase.from('customers').select('*'),
+          supabase.from('products').select('*'),
+          supabase.from('drivers').select('*')
+        ]);
+        
+        setCustomers(customersData || []);
+        setProducts(productsData || []);
+        setDrivers(driversData || []);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load required data",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingProducts(false);
+      }
     };
     
     loadData();
-  }, []);
+  }, [toast]);
 
   // NEW: Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -92,7 +105,14 @@ export function DeliveriesSection() {
       ...prev,
       delivery_items: [
         ...prev.delivery_items,
-        { product_id: '', product_name: '', quantity: 1, unit_price: 0, total_price: 0 }
+        { 
+          id: Date.now(), // Temporary ID for tracking
+          product_id: '', 
+          product_name: '', 
+          quantity: 1, 
+          unit_price: 0, 
+          total_price: 0 
+        }
       ]
     }));
   };
@@ -105,11 +125,16 @@ export function DeliveriesSection() {
     }));
   };
 
-  // NEW: Calculate total amount
+  // NEW: Calculate total amount based on items
   useEffect(() => {
     const total = formData.delivery_items.reduce((sum, item) => sum + (item.total_price || 0), 0);
     setFormData(prev => ({ ...prev, total_amount: total }));
   }, [formData.delivery_items]);
+
+  // NEW: Calculate individual item total when quantity or price changes
+  const calculateItemTotal = (quantity: number, unit_price: number) => {
+    return quantity * unit_price;
+  };
 
   // NEW: Sorting state
   const [sortField, setSortField] = useState<string | null>(null);
@@ -150,9 +175,12 @@ export function DeliveriesSection() {
           customers (customer_name),
           drivers (name, vehicle_number),
           delivery_items (
+            id,
             product_id,
             product_name,
-            quantity
+            quantity,
+            unit_price,
+            total_price
           ),
           delivery_queries (id, status)
         `)
@@ -854,7 +882,7 @@ export function DeliveriesSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - FIXED */}
+      {/* EDIT FORM MODAL - COMPLETELY FIXED */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -874,207 +902,211 @@ export function DeliveriesSection() {
                 </button>
               </div>
               
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Customer *</label>
-                    <select
-                      name="customer_id"
-                      value={formData.customer_id}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full p-2 border rounded"
-                    >
-                      <option value="">Select Customer</option>
-                      {customers.map(customer => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.customer_name}
-                        </option>
-                      ))}
-                    </select>
+              {loadingProducts ? (
+                <div className="text-center py-8">Loading products...</div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Customer *</label>
+                      <select
+                        name="customer_id"
+                        value={formData.customer_id}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="">Select Customer</option>
+                        {customers.map(customer => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.customer_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Delivery Date *</label>
+                      <input
+                        type="date"
+                        name="delivery_date"
+                        value={formData.delivery_date}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Delivery Note No.</label>
+                      <input
+                        type="text"
+                        name="delivery_note_no"
+                        value={formData.delivery_note_no}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Driver</label>
+                      <select
+                        name="driver_id"
+                        value={formData.driver_id}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="">Select Driver</option>
+                        {drivers.map(driver => (
+                          <option key={driver.id} value={driver.id}>
+                            {driver.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Quantity</label>
+                      <input
+                        type="number"
+                        name="qty"
+                        value={formData.qty}
+                        onChange={handleInputChange}
+                        min="0"
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Unit Rate</label>
+                      <input
+                        type="number"
+                        name="unit_rate"
+                        value={formData.unit_rate}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="0.01"
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Total Amount</label>
+                      <input
+                        type="number"
+                        name="total_amount"
+                        value={formData.total_amount}
+                        readOnly
+                        className="w-full p-2 border rounded bg-gray-100"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Delivery Date *</label>
-                    <input
-                      type="date"
-                      name="delivery_date"
-                      value={formData.delivery_date}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Delivery Note No.</label>
-                    <input
-                      type="text"
-                      name="delivery_note_no"
-                      value={formData.delivery_note_no}
-                      onChange={handleInputChange}
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Driver</label>
-                    <select
-                      name="driver_id"
-                      value={formData.driver_id}
-                      onChange={handleInputChange}
-                      className="w-full p-2 border rounded"
-                    >
-                      <option value="">Select Driver</option>
-                      {drivers.map(driver => (
-                        <option key={driver.id} value={driver.id}>
-                          {driver.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Quantity</label>
-                    <input
-                      type="number"
-                      name="qty"
-                      value={formData.qty}
-                      onChange={handleInputChange}
-                      min="0"
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Unit Rate</label>
-                    <input
-                      type="number"
-                      name="unit_rate"
-                      value={formData.unit_rate}
-                      onChange={handleInputChange}
-                      min="0"
-                      step="0.01"
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Total Amount</label>
-                    <input
-                      type="number"
-                      name="total_amount"
-                      value={formData.total_amount}
-                      readOnly
-                      className="w-full p-2 border rounded bg-gray-100"
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium">Products</label>
-                    <button
-                      type="button"
-                      onClick={addDeliveryItem}
-                      className="text-sm bg-blue-600 text-white px-3 py-1 rounded"
-                    >
-                      Add Item
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {formData.delivery_items.map((item, index) => (
-                      <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 border p-2 rounded">
-                        <div>
-                          <label className="block text-xs mb-1">Product</label>
-                          <select
-                            value={item.product_id || ''}
-                            onChange={(e) => {
-                              const selectedProduct = products.find(p => p.id === e.target.value);
-                              handleDeliveryItemChange(index, 'product_id', e.target.value);
-                              handleDeliveryItemChange(index, 'product_name', selectedProduct?.product_name || '');
-                              handleDeliveryItemChange(index, 'unit_price', selectedProduct?.unit_price || 0);
-                              handleDeliveryItemChange(index, 'total_price', (selectedProduct?.unit_price || 0) * (item.quantity || 1));
-                            }}
-                            className="w-full p-2 border rounded text-sm"
-                          >
-                            <option value="">Select Product</option>
-                            {products.map(product => (
-                              <option key={product.id} value={product.id}>
-                                {product.product_name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs mb-1">Qty</label>
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const newQuantity = Number(e.target.value);
-                              handleDeliveryItemChange(index, 'quantity', newQuantity);
-                              handleDeliveryItemChange(index, 'total_price', (item.unit_price || 0) * newQuantity);
-                            }}
-                            min="1"
-                            className="w-full p-2 border rounded text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs mb-1">Price</label>
-                          <input
-                            type="number"
-                            value={item.unit_price}
-                            onChange={(e) => {
-                              const newPrice = Number(e.target.value);
-                              handleDeliveryItemChange(index, 'unit_price', newPrice);
-                              handleDeliveryItemChange(index, 'total_price', newPrice * (item.quantity || 1));
-                            }}
-                            min="0"
-                            step="0.01"
-                            className="w-full p-2 border rounded text-sm"
-                          />
-                        </div>
-                        <div className="flex items-end">
-                          <div className="w-full">
-                            <label className="block text-xs mb-1">Total</label>
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium">Products</label>
+                      <button
+                        type="button"
+                        onClick={addDeliveryItem}
+                        className="text-sm bg-blue-600 text-white px-3 py-1 rounded"
+                      >
+                        Add Item
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {formData.delivery_items.map((item, index) => (
+                        <div key={item.id || index} className="grid grid-cols-1 md:grid-cols-4 gap-2 border p-2 rounded">
+                          <div>
+                            <label className="block text-xs mb-1">Product</label>
+                            <select
+                              value={item.product_id || ''}
+                              onChange={(e) => {
+                                const selectedProduct = products.find(p => p.id === e.target.value);
+                                handleDeliveryItemChange(index, 'product_id', e.target.value);
+                                handleDeliveryItemChange(index, 'product_name', selectedProduct?.product_name || '');
+                                handleDeliveryItemChange(index, 'unit_price', selectedProduct?.unit_price || 0);
+                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(item.quantity || 1, selectedProduct?.unit_price || 0));
+                              }}
+                              className="w-full p-2 border rounded text-sm"
+                            >
+                              <option value="">Select Product</option>
+                              {products.map(product => (
+                                <option key={product.id} value={product.id}>
+                                  {product.product_name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs mb-1">Qty</label>
                             <input
                               type="number"
-                              value={item.total_price}
-                              readOnly
-                              className="w-full p-2 border rounded text-sm bg-gray-100"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const newQuantity = Number(e.target.value);
+                                handleDeliveryItemChange(index, 'quantity', newQuantity);
+                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(newQuantity, item.unit_price || 0));
+                              }}
+                              min="1"
+                              className="w-full p-2 border rounded text-sm"
                             />
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => removeDeliveryItem(index)}
-                            className="ml-2 text-red-600 hover:text-red-800"
-                          >
-                            ×
-                          </button>
+                          <div>
+                            <label className="block text-xs mb-1">Price</label>
+                            <input
+                              type="number"
+                              value={item.unit_price}
+                              onChange={(e) => {
+                                const newPrice = Number(e.target.value);
+                                handleDeliveryItemChange(index, 'unit_price', newPrice);
+                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(item.quantity || 1, newPrice));
+                              }}
+                              min="0"
+                              step="0.01"
+                              className="w-full p-2 border rounded text-sm"
+                            />
+                          </div>
+                          <div className="flex items-end">
+                            <div className="w-full">
+                              <label className="block text-xs mb-1">Total</label>
+                              <input
+                                type="number"
+                                value={item.total_price}
+                                readOnly
+                                className="w-full p-2 border rounded text-sm bg-gray-100"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeDeliveryItem(index)}
+                              className="ml-2 text-red-600 hover:text-red-800"
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex justify-end space-x-2 pt-4">
-                  <Button 
-                    type="button"
-                    variant="outline" 
-                    onClick={() => {
-                      setIsFormOpen(false);
-                      setEditingDelivery(null);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700"
-                    disabled={updateDeliveryMutation.isPending}
-                  >
-                    {updateDeliveryMutation.isPending 
-                      ? 'Updating...' 
-                      : editingDelivery ? 'Update Delivery' : 'Create Delivery'}
-                  </Button>
-                </div>
-              </form>
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      onClick={() => {
+                        setIsFormOpen(false);
+                        setEditingDelivery(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      disabled={updateDeliveryMutation.isPending}
+                    >
+                      {updateDeliveryMutation.isPending 
+                        ? 'Updating...' 
+                        : editingDelivery ? 'Update Delivery' : 'Create Delivery'}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>
