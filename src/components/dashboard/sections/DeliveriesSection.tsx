@@ -9,6 +9,7 @@ import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle, CreditCa
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
+import { NotificationService } from "@/services/notificationService";
 import { format, startOfMonth, endOfMonth, subMonths, addMonths, format as formatDate } from "date-fns";
 import {
   AlertDialog,
@@ -138,6 +139,63 @@ export function DeliveriesSection() {
         }
       ]
     }));
+  };
+
+  const getEmptyFormData = () => ({
+    id: '',
+    customer_id: '',
+    delivery_date: new Date().toISOString().split('T')[0],
+    delivery_note_no: '',
+    qty: 0,
+    unit_rate: 0,
+    total_amount: 0,
+    delivery_items: [{
+      id: Date.now(),
+      product_id: '',
+      product_name: '',
+      quantity: 1,
+      unit_price: 0,
+      total_price: 0,
+    }],
+    driver_id: ''
+  });
+
+  const buildValidItems = (deliveryItems: any[]) => deliveryItems
+    .filter((item: any) => item.product_id)
+    .map((item: any) => {
+      const selectedProduct = products.find((product: any) => product.id === item.product_id);
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return {
+        ...item,
+        product_name: selectedProduct?.name || item.product_name || '',
+        quantity,
+        unit_price: unitPrice,
+        total_price: calculateItemTotal(quantity, unitPrice),
+      };
+    });
+
+  const buildDeliveryItemsPayload = (deliveryId: string, customerId: string, items: any[]) => items.map((item: any) => ({
+    delivery_id: deliveryId,
+    customer_id: customerId,
+    product_id: item.product_id,
+    product_name: item.product_name,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    total_price: item.total_price,
+  }));
+
+  const validateDeliveryItems = (items: any[]) => {
+    if (items.length === 0) {
+      throw new Error('Please select at least one product before saving the delivery.');
+    }
+
+    const totals = getFormTotals(items);
+    if (totals.totalQty <= 0 || totals.totalAmount <= 0) {
+      throw new Error('Please enter quantity and rate for each product before saving.');
+    }
+
+    return totals;
   };
 
   // NEW: Remove delivery item
@@ -444,33 +502,82 @@ export function DeliveriesSection() {
     return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock };
   };
 
+  // NEW: Create delivery mutation with proper item/payment handling
+  const createDeliveryMutation = useMutation({
+    mutationFn: async (deliveryData: any) => {
+      const validItems = buildValidItems(deliveryData.delivery_items || []);
+      const totals = validateDeliveryItems(validItems);
+
+      const { data: newDelivery, error: deliveryError } = await supabase
+        .from('deliveries')
+        .insert([{
+          customer_id: deliveryData.customer_id,
+          delivery_date: deliveryData.delivery_date,
+          delivery_note_no: deliveryData.delivery_note_no,
+          qty: totals.totalQty,
+          unit_rate: totals.firstUnitRate,
+          total_amount: totals.totalAmount,
+          driver_id: deliveryData.driver_id || null,
+          delivery_status: 'delivered',
+        }])
+        .select()
+        .single();
+
+      if (deliveryError) throw deliveryError;
+
+      const { error: itemError } = await supabase
+        .from('delivery_items')
+        .insert(buildDeliveryItemsPayload(newDelivery.id, deliveryData.customer_id, validItems));
+
+      if (itemError) throw itemError;
+
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 7);
+
+      await supabase
+        .from('payments')
+        .insert([{
+          customer_id: deliveryData.customer_id,
+          delivery_id: newDelivery.id,
+          amount: 0,
+          due_date: dueDate.toISOString().split('T')[0],
+          status: 'pending',
+        }]);
+
+      try {
+        await NotificationService.sendDeliveryNotification(newDelivery.id);
+      } catch (notificationError) {
+        console.error('Failed to send delivery notification:', notificationError);
+      }
+
+      return newDelivery;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      toast({
+        title: "Delivery created",
+        description: "Delivery has been created successfully.",
+      });
+      setIsFormOpen(false);
+      setEditingDelivery(null);
+      setFormData(getEmptyFormData());
+    },
+    onError: (error: any) => {
+      console.error('Create error:', error);
+      toast({
+        title: "Error",
+        description: `Failed to create delivery: ${error.message || 'Unknown error'}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   // NEW: Update delivery mutation with proper error handling
   const updateDeliveryMutation = useMutation({
     mutationFn: async (deliveryData: any) => {
-      const validItems = (deliveryData.delivery_items || [])
-        .filter((item: any) => item.product_id)
-        .map((item: any) => {
-          const selectedProduct = products.find((product: any) => product.id === item.product_id);
-          const quantity = Number(item.quantity || 0);
-          const unitPrice = Number(item.unit_price || 0);
-          return {
-            ...item,
-            product_name: selectedProduct?.name || item.product_name || '',
-            quantity,
-            unit_price: unitPrice,
-            total_price: calculateItemTotal(quantity, unitPrice),
-          };
-        });
-
-      if (validItems.length === 0) {
-        throw new Error('Please select at least one product before updating the delivery.');
-      }
-
-      const totals = getFormTotals(validItems);
-
-      if (totals.totalQty <= 0) {
-        throw new Error('Please enter quantity and rate for each product before updating.');
-      }
+      const validItems = buildValidItems(deliveryData.delivery_items || []);
+      const totals = validateDeliveryItems(validItems);
 
       // Update delivery record
       const { data: deliveryDataResult, error: deliveryError } = await supabase
@@ -506,21 +613,18 @@ export function DeliveriesSection() {
         
         // Then insert new items if any exist
         if (validItems.length > 0) {
-          const itemsToInsert = validItems.map((item: any) => ({
-            delivery_id: deliveryData.id,
-            product_id: item.product_id,
-            product_name: item.product_name,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            total_price: item.total_price
-          }));
-          
           const { error: itemError } = await supabase
             .from('delivery_items')
-            .insert(itemsToInsert);
+            .insert(buildDeliveryItemsPayload(deliveryData.id, deliveryData.customer_id, validItems));
             
           if (itemError) throw itemError;
         }
+      }
+
+      try {
+        await NotificationService.sendDeliveryNotification(deliveryData.id);
+      } catch (notificationError) {
+        console.error('Failed to send delivery update notification:', notificationError);
       }
       
       return deliveryDataResult;
@@ -533,6 +637,7 @@ export function DeliveriesSection() {
       });
       setIsFormOpen(false);
       setEditingDelivery(null);
+      setFormData(getEmptyFormData());
     },
     onError: (error: any) => {
       console.error('Update error:', error);
@@ -613,12 +718,18 @@ export function DeliveriesSection() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const totals = getFormTotals();
-    updateDeliveryMutation.mutate({
+    const payload = {
       ...formData,
       qty: totals.totalQty,
       unit_rate: totals.firstUnitRate,
       total_amount: totals.totalAmount,
-    });
+    };
+
+    if (editingDelivery && formData.id) {
+      updateDeliveryMutation.mutate(payload);
+    } else {
+      createDeliveryMutation.mutate(payload);
+    }
   };
 
   // NEW: Reference for table container
@@ -640,7 +751,11 @@ export function DeliveriesSection() {
             <Upload className="w-3 h-3 mr-1" />
             Import
           </Button>
-          <Button className="bg-gradient-primary" size="sm" onClick={() => setIsFormOpen(true)}>
+          <Button className="bg-gradient-primary" size="sm" onClick={() => {
+            setEditingDelivery(null);
+            setFormData(getEmptyFormData());
+            setIsFormOpen(true);
+          }}>
             <Plus className="w-3 h-3 mr-1" />
             New
           </Button>
@@ -1132,7 +1247,9 @@ export function DeliveriesSection() {
                               }}
                               className="w-full p-2 border rounded text-sm"
                             >
-                              <option value="">Select Product</option>
+                                <option value="">
+                                  {item.product_name ? `Unmatched: ${item.product_name}` : 'Select Product'}
+                                </option>
                               {products.map(product => (
                                 <option key={product.id} value={product.id}>
                                   {getProductLabel(product)}
@@ -1219,6 +1336,7 @@ export function DeliveriesSection() {
                       onClick={() => {
                         setIsFormOpen(false);
                         setEditingDelivery(null);
+                        setFormData(getEmptyFormData());
                       }}
                     >
                       Cancel
@@ -1226,10 +1344,10 @@ export function DeliveriesSection() {
                     <Button 
                       type="submit"
                       className="bg-blue-600 hover:bg-blue-700"
-                      disabled={updateDeliveryMutation.isPending}
+                      disabled={updateDeliveryMutation.isPending || createDeliveryMutation.isPending}
                     >
-                      {updateDeliveryMutation.isPending 
-                        ? 'Updating...' 
+                      {updateDeliveryMutation.isPending || createDeliveryMutation.isPending 
+                        ? (editingDelivery ? 'Updating...' : 'Creating...') 
                         : editingDelivery ? 'Update Delivery' : 'Create Delivery'}
                     </Button>
                   </div>
