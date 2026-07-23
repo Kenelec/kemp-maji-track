@@ -262,15 +262,15 @@ export function DeliveriesSection() {
               ref={tableContainerRef}
               className="overflow-x-auto"
             >
-              {/* NEW: Wrapper div with specific height and overflow */}
+              {/* NEW: Scrollable container with fixed height */}
               <div className="h-[60vh] overflow-y-auto">
-                {/* NEW: Header with guaranteed sticky positioning */}
-                <div className="sticky top-0 z-[100] bg-background">
+                {/* NEW: Fixed header container with highest z-index */}
+                <div className="sticky top-0 z-[1000] bg-background">
                   <Table className="min-w-[1200px]">
                     <TableHeader className="bg-background">
                       <TableRow>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[200]"
+                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000]"
                           onClick={() => handleSort('customers.customer_name')}
                         >
                           Customer {getSortIcon('customers.customer_name')}
@@ -313,14 +313,14 @@ export function DeliveriesSection() {
                         >
                           Confirmation {getSortIcon('payment_status')}
                         </TableHead>
-                        <TableHead className="text-right sticky right-0 bg-background z-[200]">Actions</TableHead>
+                        <TableHead className="text-right sticky right-0 bg-background z-[2000]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                   </Table>
                 </div>
                 
-                {/* NEW: Data rows with scrolling */}
-                <div className="mt-0">
+                {/* NEW: Data rows with lower z-index to prevent overlapping */}
+                <div className="relative z-[500]">
                   <Table className="min-w-[1200px]">
                     <TableBody>
                       {sortedDeliveries.map((delivery) => {
@@ -328,7 +328,7 @@ export function DeliveriesSection() {
                         const StatusIcon = confirmStatus.icon;
                         return (
                           <TableRow key={delivery.id}>
-                            <TableCell className="font-medium sticky left-0 bg-background z-[150]">
+                            <TableCell className="font-medium sticky left-0 bg-background z-[1500]">
                               {delivery.customers?.customer_name || "Unknown"}
                             </TableCell>
                             <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
@@ -354,7 +354,7 @@ export function DeliveriesSection() {
                                 {confirmStatus.label}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right sticky right-0 bg-background z-[150]">
+                            <TableCell className="text-right sticky right-0 bg-background z-[1500]">
                               {isMasterAdmin && (
                                 <div className="flex justify-end gap-2">
                                   <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
