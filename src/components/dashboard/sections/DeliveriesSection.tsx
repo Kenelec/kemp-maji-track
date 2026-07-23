@@ -44,7 +44,7 @@ export function DeliveriesSection() {
   // NEW: Column widths state
   const [columnWidths, setColumnWidths] = useState({
     customer: 150,
-    date: 120, // Increased width for full date
+    date: 120,
     driver: 120,
     note: 100,
     products: 120,
@@ -298,7 +298,7 @@ export function DeliveriesSection() {
     }
   };
 
-  // NEW: Reference for table container to enable horizontal scrolling
+  // NEW: Reference for table container
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   // NEW: Format month display
@@ -371,7 +371,7 @@ export function DeliveriesSection() {
             >
               {/* COMPACT SCROLLABLE CONTAINER */}
               <div className="h-[calc(100vh-280px)] overflow-y-auto">
-                {/* FIXED HEADER WITH CUSTOM COLUMN WIDTHS */}
+                {/* FIXED HEADER */}
                 <div className="sticky top-0 z-[1000] bg-background border-b">
                   <Table className="min-w-max">
                     <TableHeader className="bg-background">
@@ -564,7 +564,7 @@ export function DeliveriesSection() {
                           </div>
                         </TableHead>
                         
-                        {/* Actions Column - No resize handle for last column */}
+                        {/* Actions Column */}
                         <TableHead 
                           className="text-right sticky right-0 bg-background z-[2000] !important text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.actions}px` }}
@@ -578,7 +578,7 @@ export function DeliveriesSection() {
                   </Table>
                 </div>
                 
-                {/* COMPACT DATA ROWS WITH CUSTOM COLUMN WIDTHS */}
+                {/* DATA ROWS */}
                 <div className="relative z-[500]">
                   <Table className="min-w-max">
                     <TableBody>
@@ -597,7 +597,7 @@ export function DeliveriesSection() {
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.date}px` }}
                             >
-                              {format(new Date(delivery.delivery_date), "dd/MM/yyyy")} {/* FIXED: Full date format */}
+                              {format(new Date(delivery.delivery_date), "dd/MM/yyyy")}
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
@@ -663,7 +663,7 @@ export function DeliveriesSection() {
                                     variant="ghost" 
                                     size="xs" 
                                     onClick={() => handleEdit(delivery)}
-                                    className="z-[3000]" // Ensure high z-index for modal
+                                    className="z-[3000]"
                                   >
                                     <Pencil className="w-3 h-3" />
                                   </Button>
@@ -671,7 +671,7 @@ export function DeliveriesSection() {
                                     variant="ghost" 
                                     size="xs" 
                                     onClick={() => handleDelete(delivery.id)}
-                                    className="z-[3000]" // Ensure high z-index for modal
+                                    className="z-[3000]"
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </Button>
@@ -690,18 +690,26 @@ export function DeliveriesSection() {
         </CardContent>
       </Card>
 
-      {/* ENHANCED MODAL FOR EDIT/CREATE FORM */}
+      {/* ENHANCED MODAL WITH PROPER STYLING - THIS WILL FIX THE TRANSPARENCY */}
       {isFormOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DeliveryFormDialog
-              open={isFormOpen}
-              onOpenChange={(open) => {
-                setIsFormOpen(open);
-                if (!open) setEditingDelivery(null);
-              }}
-              editData={editingDelivery}
-            />
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4"
+          style={{ background: 'rgba(0, 0, 0, 0.5)' }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[90vh] overflow-y-auto"
+            style={{ background: 'white', backdropFilter: 'none' }}
+          >
+            <div className="p-6">
+              <DeliveryFormDialog
+                open={isFormOpen}
+                onOpenChange={(open) => {
+                  setIsFormOpen(open);
+                  if (!open) setEditingDelivery(null);
+                }}
+                editData={editingDelivery}
+              />
+            </div>
           </div>
         </div>
       )}
