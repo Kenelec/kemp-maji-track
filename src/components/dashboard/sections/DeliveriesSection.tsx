@@ -57,14 +57,31 @@ export function DeliveriesSection() {
     const loadData = async () => {
       setLoadingProducts(true);
       try {
-        const [{ data: customersData }, { data: productsData }, { data: driversData }] = await Promise.all([
-          supabase.from('customers').select('*'),
-          supabase.from('products').select('*'),
-          supabase.from('drivers').select('*')
+        const [{ data: customersData }, { data: productsData }, { data: driversData }, { data: recentItemPrices }] = await Promise.all([
+          supabase.from('customers').select('*').order('customer_name'),
+          supabase.from('products').select('*').order('name'),
+          supabase.from('drivers').select('*').order('name'),
+          supabase.from('delivery_items').select('product_id, unit_price').gt('unit_price', 0)
         ]);
+
+        const fallbackPrices = new Map<string, number>();
+        (recentItemPrices || []).forEach((item: any) => {
+          const price = Number(item.unit_price || 0);
+          if (item.product_id && price > 0 && !fallbackPrices.has(item.product_id)) {
+            fallbackPrices.set(item.product_id, price);
+          }
+        });
+
+        const productsWithPrices = (productsData || []).map((product: any) => {
+          const productPrice = Number(product.unit_price || 0);
+          return {
+            ...product,
+            effective_unit_price: productPrice > 0 ? productPrice : fallbackPrices.get(product.id) || 0,
+          };
+        });
         
         setCustomers(customersData || []);
-        setProducts(productsData || []);
+        setProducts(productsWithPrices);
         setDrivers(driversData || []);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -94,7 +111,13 @@ export function DeliveriesSection() {
   const handleDeliveryItemChange = (index: number, field: string, value: any) => {
     setFormData(prev => {
       const newItems = [...prev.delivery_items];
-      newItems[index] = { ...newItems[index], [field]: value };
+      const nextItem = { ...newItems[index], [field]: value };
+      if (field === 'quantity' || field === 'unit_price') {
+        const quantity = Number(nextItem.quantity || 0);
+        const unitPrice = Number(nextItem.unit_price || 0);
+        nextItem.total_price = calculateItemTotal(quantity, unitPrice);
+      }
+      newItems[index] = nextItem;
       return { ...prev, delivery_items: newItems };
     });
   };
@@ -134,6 +157,57 @@ export function DeliveriesSection() {
   // NEW: Calculate individual item total when quantity or price changes
   const calculateItemTotal = (quantity: number, unit_price: number) => {
     return quantity * unit_price;
+  };
+
+  const getProductLabel = (product: any) => {
+    const description = product.description ? ` - ${product.description}` : '';
+    return `${product.name}${description}`;
+  };
+
+  const getProductPrice = (product: any) => {
+    const savedPrice = Number(product?.unit_price || 0);
+    const fallbackPrice = Number(product?.effective_unit_price || 0);
+    return savedPrice > 0 ? savedPrice : fallbackPrice;
+  };
+
+  const getFormTotals = (items = formData.delivery_items) => {
+    const validItems = items.filter((item: any) => item.product_id);
+    const totalQty = validItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+    const totalAmount = validItems.reduce((sum: number, item: any) => {
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return sum + calculateItemTotal(quantity, unitPrice);
+    }, 0);
+    const firstUnitRate = Number(validItems[0]?.unit_price || 0);
+    return { totalQty, totalAmount, firstUnitRate };
+  };
+
+  const normalizeDeliveryItems = (delivery: any) => {
+    const sourceItems = Array.isArray(delivery.delivery_items) ? delivery.delivery_items : [];
+
+    if (sourceItems.length === 0) {
+      return [{
+        id: `fallback-${delivery.id}`,
+        product_id: '',
+        product_name: '',
+        quantity: Number(delivery.qty || 1),
+        unit_price: Number(delivery.unit_rate || 0),
+        total_price: Number(delivery.total_amount || 0),
+      }];
+    }
+
+    return sourceItems.map((item: any) => {
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return {
+        ...item,
+        product_id: item.product_id || '',
+        product_name: item.product_name || '',
+        quantity,
+        unit_price: unitPrice,
+        total_price: Number(item.total_price || calculateItemTotal(quantity, unitPrice)),
+      };
+    });
   };
 
   // NEW: Sorting state
@@ -356,6 +430,31 @@ export function DeliveriesSection() {
   // NEW: Update delivery mutation with proper error handling
   const updateDeliveryMutation = useMutation({
     mutationFn: async (deliveryData: any) => {
+      const validItems = (deliveryData.delivery_items || [])
+        .filter((item: any) => item.product_id)
+        .map((item: any) => {
+          const selectedProduct = products.find((product: any) => product.id === item.product_id);
+          const quantity = Number(item.quantity || 0);
+          const unitPrice = Number(item.unit_price || 0);
+          return {
+            ...item,
+            product_name: selectedProduct?.name || item.product_name || '',
+            quantity,
+            unit_price: unitPrice,
+            total_price: calculateItemTotal(quantity, unitPrice),
+          };
+        });
+
+      if (validItems.length === 0) {
+        throw new Error('Please select at least one product before updating the delivery.');
+      }
+
+      const totals = getFormTotals(validItems);
+
+      if (totals.totalQty <= 0 || totals.totalAmount <= 0) {
+        throw new Error('Please enter quantity and rate for each product before updating.');
+      }
+
       // Update delivery record
       const { data: deliveryDataResult, error: deliveryError } = await supabase
         .from('deliveries')
@@ -363,10 +462,16 @@ export function DeliveriesSection() {
           customer_id: deliveryData.customer_id,
           delivery_date: deliveryData.delivery_date,
           delivery_note_no: deliveryData.delivery_note_no,
-          qty: deliveryData.qty,
-          unit_rate: deliveryData.unit_rate,
-          total_amount: deliveryData.total_amount,
-          driver_id: deliveryData.driver_id
+          qty: totals.totalQty,
+          unit_rate: totals.firstUnitRate,
+          total_amount: totals.totalAmount,
+          driver_id: deliveryData.driver_id || null,
+          customer_confirmed: false,
+          confirmed_at: null,
+          auto_confirmed: false,
+          discrepancy_flag: false,
+          discrepancy_notes: null,
+          confirmation_deadline: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
         })
         .eq('id', deliveryData.id);
 
@@ -383,8 +488,8 @@ export function DeliveriesSection() {
         if (deleteError) throw deleteError;
         
         // Then insert new items if any exist
-        if (deliveryData.delivery_items.length > 0) {
-          const itemsToInsert = deliveryData.delivery_items.map((item: any) => ({
+        if (validItems.length > 0) {
+          const itemsToInsert = validItems.map((item: any) => ({
             delivery_id: deliveryData.id,
             product_id: item.product_id,
             product_name: item.product_name,
@@ -449,16 +554,19 @@ export function DeliveriesSection() {
   });
 
   const handleEdit = (delivery: any) => {
+    const deliveryItems = normalizeDeliveryItems(delivery);
+    const totals = getFormTotals(deliveryItems);
+
     // Populate form data with delivery details including existing items
     setFormData({
       id: delivery.id,
       customer_id: delivery.customer_id || '',
       delivery_date: delivery.delivery_date || '',
       delivery_note_no: delivery.delivery_note_no || '',
-      qty: delivery.qty || 0,
-      unit_rate: delivery.unit_rate || 0,
-      total_amount: delivery.total_amount || 0,
-      delivery_items: delivery.delivery_items || [],
+      qty: totals.totalQty || Number(delivery.qty || 0),
+      unit_rate: totals.firstUnitRate || Number(delivery.unit_rate || 0),
+      total_amount: totals.totalAmount || Number(delivery.total_amount || 0),
+      delivery_items: deliveryItems,
       driver_id: delivery.driver_id || ''
     });
     setEditingDelivery(delivery);
@@ -487,7 +595,13 @@ export function DeliveriesSection() {
   // NEW: Handle form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateDeliveryMutation.mutate(formData);
+    const totals = getFormTotals();
+    updateDeliveryMutation.mutate({
+      ...formData,
+      qty: totals.totalQty,
+      unit_rate: totals.firstUnitRate,
+      total_amount: totals.totalAmount,
+    });
   };
 
   // NEW: Reference for table container
