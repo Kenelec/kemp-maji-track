@@ -150,8 +150,13 @@ export function DeliveriesSection() {
 
   // NEW: Calculate total amount based on items
   useEffect(() => {
-    const total = formData.delivery_items.reduce((sum, item) => sum + (item.total_price || 0), 0);
-    setFormData(prev => ({ ...prev, total_amount: total }));
+    const { totalQty, totalAmount, firstUnitRate } = getFormTotals();
+    setFormData(prev => ({
+      ...prev,
+      qty: totalQty,
+      unit_rate: firstUnitRate,
+      total_amount: totalAmount,
+    }));
   }, [formData.delivery_items]);
 
   // NEW: Calculate individual item total when quantity or price changes
