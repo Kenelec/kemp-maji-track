@@ -451,7 +451,7 @@ export function DeliveriesSection() {
 
       const totals = getFormTotals(validItems);
 
-      if (totals.totalQty <= 0 || totals.totalAmount <= 0) {
+      if (totals.totalQty <= 0) {
         throw new Error('Please enter quantity and rate for each product before updating.');
       }
 
@@ -1075,39 +1075,6 @@ export function DeliveriesSection() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Quantity</label>
-                      <input
-                        type="number"
-                        name="qty"
-                        value={formData.qty}
-                        onChange={handleInputChange}
-                        min="0"
-                        className="w-full p-2 border rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Unit Rate</label>
-                      <input
-                        type="number"
-                        name="unit_rate"
-                        value={formData.unit_rate}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        className="w-full p-2 border rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Total Amount</label>
-                      <input
-                        type="number"
-                        name="total_amount"
-                        value={formData.total_amount}
-                        readOnly
-                        className="w-full p-2 border rounded bg-gray-100"
-                      />
-                    </div>
                   </div>
 
                   <div>
@@ -1124,14 +1091,14 @@ export function DeliveriesSection() {
                     
                     <div className="space-y-3">
                       {formData.delivery_items.map((item, index) => (
-                        <div key={item.id || index} className="grid grid-cols-1 md:grid-cols-4 gap-2 border p-2 rounded">
+                        <div key={item.id || index} className="grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_90px_120px_120px_32px] gap-2 border p-2 rounded items-end">
                           <div>
                             <label className="block text-xs mb-1">Product</label>
                             <select
                               value={item.product_id || ''}
                               onChange={(e) => {
                                 const selectedProduct = products.find(p => p.id === e.target.value);
-                                const newPrice = selectedProduct?.unit_price || 0;
+                                const newPrice = getProductPrice(selectedProduct);
                                 const newQty = item.quantity || 1;
                                 setFormData(prev => {
                                   const newItems = [...prev.delivery_items];
@@ -1151,7 +1118,7 @@ export function DeliveriesSection() {
                               <option value="">Select Product</option>
                               {products.map(product => (
                                 <option key={product.id} value={product.id}>
-                                  {product.name}
+                                  {getProductLabel(product)}
                                 </option>
                               ))}
                             </select>
@@ -1164,7 +1131,6 @@ export function DeliveriesSection() {
                               onChange={(e) => {
                                 const newQuantity = Number(e.target.value);
                                 handleDeliveryItemChange(index, 'quantity', newQuantity);
-                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(newQuantity, item.unit_price || 0));
                               }}
                               min="1"
                               className="w-full p-2 border rounded text-sm"
@@ -1178,33 +1144,54 @@ export function DeliveriesSection() {
                               onChange={(e) => {
                                 const newPrice = Number(e.target.value);
                                 handleDeliveryItemChange(index, 'unit_price', newPrice);
-                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(item.quantity || 1, newPrice));
                               }}
                               min="0"
                               step="0.01"
                               className="w-full p-2 border rounded text-sm"
                             />
                           </div>
-                          <div className="flex items-end">
-                            <div className="w-full">
-                              <label className="block text-xs mb-1">Total</label>
-                              <input
-                                type="number"
-                                value={item.total_price}
-                                readOnly
-                                className="w-full p-2 border rounded text-sm bg-gray-100"
-                              />
-                            </div>
+                          <div>
+                            <label className="block text-xs mb-1">Total</label>
+                            <input
+                              type="number"
+                              value={Number(item.total_price || 0)}
+                              readOnly
+                              className="w-full p-2 border rounded text-sm bg-gray-100"
+                            />
+                          </div>
+                          <div className="flex items-center justify-center pb-2">
                             <button
                               type="button"
                               onClick={() => removeDeliveryItem(index)}
-                              className="ml-2 text-red-600 hover:text-red-800"
+                              className="text-red-600 hover:text-red-800"
+                              aria-label="Remove product"
                             >
                               ×
                             </button>
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded border bg-gray-50 p-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Total Quantity</label>
+                      <input
+                        type="number"
+                        value={formData.qty}
+                        readOnly
+                        className="w-full p-2 border rounded bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Total Amount</label>
+                      <input
+                        type="number"
+                        value={formData.total_amount}
+                        readOnly
+                        className="w-full p-2 border rounded bg-white"
+                      />
                     </div>
                   </div>
 
