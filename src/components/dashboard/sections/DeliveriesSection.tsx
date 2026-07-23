@@ -270,7 +270,7 @@ export function DeliveriesSection() {
                     <TableHeader className="bg-background">
                       <TableRow>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000]"
+                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000] !important"
                           onClick={() => handleSort('customers.customer_name')}
                         >
                           Customer {getSortIcon('customers.customer_name')}
@@ -313,7 +313,7 @@ export function DeliveriesSection() {
                         >
                           Confirmation {getSortIcon('payment_status')}
                         </TableHead>
-                        <TableHead className="text-right sticky right-0 bg-background z-[2000]">Actions</TableHead>
+                        <TableHead className="text-right sticky right-0 bg-background z-[2000] !important">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                   </Table>
@@ -328,7 +328,7 @@ export function DeliveriesSection() {
                         const StatusIcon = confirmStatus.icon;
                         return (
                           <TableRow key={delivery.id}>
-                            <TableCell className="font-medium sticky left-0 bg-background z-[1500]">
+                            <TableCell className="font-medium sticky left-0 bg-background z-[1500] !important">
                               {delivery.customers?.customer_name || "Unknown"}
                             </TableCell>
                             <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
@@ -354,7 +354,7 @@ export function DeliveriesSection() {
                                 {confirmStatus.label}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right sticky right-0 bg-background z-[1500]">
+                            <TableCell className="text-right sticky right-0 bg-background z-[1500] !important">
                               {isMasterAdmin && (
                                 <div className="flex justify-end gap-2">
                                   <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
