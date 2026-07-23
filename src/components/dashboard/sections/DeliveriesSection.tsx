@@ -150,7 +150,15 @@ export function DeliveriesSection() {
 
   // NEW: Calculate total amount based on items
   useEffect(() => {
-    const { totalQty, totalAmount, firstUnitRate } = getFormTotals();
+    const validItems = formData.delivery_items.filter((item: any) => item.product_id);
+    const totalQty = validItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+    const totalAmount = validItems.reduce((sum: number, item: any) => {
+      const quantity = Number(item.quantity || 0);
+      const unitPrice = Number(item.unit_price || 0);
+      return sum + calculateItemTotal(quantity, unitPrice);
+    }, 0);
+    const firstUnitRate = Number(validItems[0]?.unit_price || 0);
+
     setFormData(prev => ({
       ...prev,
       qty: totalQty,
@@ -202,12 +210,16 @@ export function DeliveriesSection() {
     }
 
     return sourceItems.map((item: any) => {
+      const matchedProduct = products.find((product: any) => (
+        product.id === item.product_id ||
+        product.name?.trim().toLowerCase() === item.product_name?.trim().toLowerCase()
+      ));
       const quantity = Number(item.quantity || 0);
       const unitPrice = Number(item.unit_price || 0);
       return {
         ...item,
-        product_id: item.product_id || '',
-        product_name: item.product_name || '',
+        product_id: matchedProduct?.id || item.product_id || '',
+        product_name: matchedProduct?.name || item.product_name || '',
         quantity,
         unit_price: unitPrice,
         total_price: Number(item.total_price || calculateItemTotal(quantity, unitPrice)),
