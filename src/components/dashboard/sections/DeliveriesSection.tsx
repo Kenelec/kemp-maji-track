@@ -861,7 +861,7 @@ export function DeliveriesSection() {
                                   </Button>
                                   <Button 
                                     variant="ghost" 
-                                    size="xs" 
+                                    size="sm" 
                                     onClick={() => handleDelete(delivery.id)}
                                     className="z-[3000]"
                                   >
