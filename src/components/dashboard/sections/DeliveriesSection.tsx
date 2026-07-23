@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { DeliveryFormDialog } from "../forms/DeliveryFormDialog";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
-import { format, startOfMonth, endOfMonth, subMonths, addMonths, getMonth, getYear, format as formatDate } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, addMonths, format as formatDate } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +41,23 @@ export function DeliveriesSection() {
   // NEW: Monthly navigation
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
 
+  // NEW: Column widths state
+  const [columnWidths, setColumnWidths] = useState({
+    customer: 150,
+    date: 100,
+    driver: 120,
+    note: 100,
+    products: 120,
+    qty: 80,
+    rate: 100,
+    total: 100,
+    status: 100,
+    actions: 120
+  });
+
+  // NEW: Resizing state
+  const [isResizing, setIsResizing] = useState<{column: string, startX: number, startWidth: number} | null>(null);
+
   // NEW: Calculate month range
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -63,7 +80,7 @@ export function DeliveriesSection() {
         `)
         .gte("delivery_date", monthStart.toISOString().split('T')[0])
         .lte("delivery_date", monthEnd.toISOString().split('T')[0])
-        .order("delivery_date", { ascending: false }); // Order by date descending
+        .order("delivery_date", { ascending: false });
       
       if (error) throw error;
       return data;
@@ -167,6 +184,42 @@ export function DeliveriesSection() {
     if (sortField !== field) return '↕️';
     return sortOrder === 'asc' ? '↑' : '↓';
   };
+
+  // NEW: Handle column resize start
+  const handleResizeStart = (column: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    const currentWidth = columnWidths[column as keyof typeof columnWidths];
+    setIsResizing({ column, startX: e.clientX, startWidth: currentWidth });
+  };
+
+  // NEW: Handle mouse move for resizing
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizing) {
+        const deltaX = e.clientX - isResizing.startX;
+        const newWidth = Math.max(60, isResizing.startWidth + deltaX); // Minimum width of 60px
+        
+        setColumnWidths(prev => ({
+          ...prev,
+          [isResizing.column]: newWidth
+        }));
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(null);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   const getConfirmationStatus = (delivery: any) => {
     const hasQuery = delivery.delivery_queries && delivery.delivery_queries.length > 0;
@@ -314,106 +367,226 @@ export function DeliveriesSection() {
             >
               {/* COMPACT SCROLLABLE CONTAINER */}
               <div className="h-[calc(100vh-280px)] overflow-y-auto">
-                {/* FIXED HEADER */}
+                {/* FIXED HEADER WITH CUSTOM COLUMN WIDTHS */}
                 <div className="sticky top-0 z-[1000] bg-background">
-                  <Table className="min-w-[1200px]">
+                  <Table className="min-w-max">
                     <TableHeader className="bg-background">
                       <TableRow className="hover:bg-transparent">
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000] !important text-xs py-1 px-2"
-                          onClick={() => handleSort('customers.customer_name')}
+                          style={{ width: `${columnWidths.customer}px` }}
                         >
-                          Customer {getSortIcon('customers.customer_name')}
+                          <div className="flex items-center justify-between">
+                            <span onClick={() => handleSort('customers.customer_name')}>
+                              Customer {getSortIcon('customers.customer_name')}
+                            </span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('customer', e)}
+                            />
+                          </div>
                         </TableHead>
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
-                          onClick={() => handleSort('delivery_date')}
+                          style={{ width: `${columnWidths.date}px` }}
                         >
-                          Date {getSortIcon('delivery_date')}
+                          <div className="flex items-center justify-between">
+                            <span onClick={() => handleSort('delivery_date')}>
+                              Date {getSortIcon('delivery_date')}
+                            </span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('date', e)}
+                            />
+                          </div>
                         </TableHead>
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
-                          onClick={() => handleSort('drivers.name')}
+                          style={{ width: `${columnWidths.driver}px` }}
                         >
-                          Driver {getSortIcon('drivers.name')}
+                          <div className="flex items-center justify-between">
+                            <span onClick={() => handleSort('drivers.name')}>
+                              Driver {getSortIcon('drivers.name')}
+                            </span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('driver', e)}
+                            />
+                          </div>
                         </TableHead>
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
-                          onClick={() => handleSort('delivery_note_no')}
+                          style={{ width: `${columnWidths.note}px` }}
                         >
-                          Note No. {getSortIcon('delivery_note_no')}
-                        </TableHead>
-                        <TableHead className="text-xs py-1 px-2">Products</TableHead>
-                        <TableHead className="text-xs py-1 px-2">Qty</TableHead>
-                        <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
-                          onClick={() => handleSort('unit_rate')}
-                        >
-                          Rate {getSortIcon('unit_rate')}
-                        </TableHead>
-                        <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
-                          onClick={() => handleSort('total_amount')}
-                        >
-                          Total {getSortIcon('total_amount')}
+                          <div className="flex items-center justify-between">
+                            <span onClick={() => handleSort('delivery_note_no')}>
+                              Note No. {getSortIcon('delivery_note_no')}
+                            </span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('note', e)}
+                            />
+                          </div>
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
-                          onClick={() => handleSort('payment_status')}
+                          className="text-xs py-1 px-2"
+                          style={{ width: `${columnWidths.products}px` }}
                         >
-                          Status {getSortIcon('payment_status')}
+                          <div className="flex items-center justify-between">
+                            <span>Products</span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('products', e)}
+                            />
+                          </div>
                         </TableHead>
-                        <TableHead className="text-right sticky right-0 bg-background z-[2000] !important text-xs py-1 px-2">Actions</TableHead>
+                        <TableHead 
+                          className="text-xs py-1 px-2"
+                          style={{ width: `${columnWidths.qty}px` }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>Qty</span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('qty', e)}
+                            />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          style={{ width: `${columnWidths.rate}px` }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span onClick={() => handleSort('unit_rate')}>
+                              Rate {getSortIcon('unit_rate')}
+                            </span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('rate', e)}
+                            />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          style={{ width: `${columnWidths.total}px` }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span onClick={() => handleSort('total_amount')}>
+                              Total {getSortIcon('total_amount')}
+                            </span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('total', e)}
+                            />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          style={{ width: `${columnWidths.status}px` }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span onClick={() => handleSort('payment_status')}>
+                              Status {getSortIcon('payment_status')}
+                            </span>
+                            <div
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              onMouseDown={(e) => handleResizeStart('status', e)}
+                            />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="text-right sticky right-0 bg-background z-[2000] !important text-xs py-1 px-2"
+                          style={{ width: `${columnWidths.actions}px` }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>Actions</span>
+                            {/* No resizer for last column */}
+                          </div>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                   </Table>
                 </div>
                 
-                {/* COMPACT DATA ROWS */}
+                {/* COMPACT DATA ROWS WITH CUSTOM COLUMN WIDTHS */}
                 <div className="relative z-[500]">
-                  <Table className="min-w-[1200px]">
+                  <Table className="min-w-max">
                     <TableBody>
                       {sortedDeliveries.map((delivery) => {
                         const confirmStatus = getConfirmationStatus(delivery);
                         const StatusIcon = confirmStatus.icon;
                         return (
                           <TableRow key={delivery.id} className="hover:bg-gray-50">
-                            <TableCell className="font-medium sticky left-0 bg-background z-[1500] !important text-xs py-1 px-2">
+                            <TableCell 
+                              className="font-medium sticky left-0 bg-background z-[1500] !important text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.customer}px` }}
+                            >
                               {delivery.customers?.customer_name || "Unknown"}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.date}px` }}
+                            >
                               {format(new Date(delivery.delivery_date), "dd/MM")}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.driver}px` }}
+                            >
                               {(delivery as any).drivers?.name || "—"}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.note}px` }}
+                            >
                               {delivery.delivery_note_no || "—"}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.products}px` }}
+                            >
                               {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
-                                <div className="max-w-[100px] truncate">
-                                  {delivery.delivery_items[0]?.product_name || "—"}
+                                <div className="truncate max-w-full">
+                                  {delivery.delivery_items.map((item, idx) => (
+                                    <div key={idx} className="truncate">
+                                      {item.product_name}
+                                    </div>
+                                  ))}
                                 </div>
                               ) : (
                                 "—"
                               )}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.qty}px` }}
+                            >
                               {delivery.qty}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.rate}px` }}
+                            >
                               {Number(delivery.unit_rate).toLocaleString()}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2 font-semibold">
+                            <TableCell 
+                              className="text-xs py-1 px-2 font-semibold"
+                              style={{ width: `${columnWidths.total}px` }}
+                            >
                               {Number(delivery.total_amount).toLocaleString()}
                             </TableCell>
-                            <TableCell className="text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.status}px` }}
+                            >
                               <Badge className={`${confirmStatus.color} text-[10px]`} variant="secondary">
                                 {confirmStatus.label}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right sticky right-0 bg-background z-[1500] !important text-xs py-1 px-2">
+                            <TableCell 
+                              className="text-right sticky right-0 bg-background z-[1500] !important text-xs py-1 px-2"
+                              style={{ width: `${columnWidths.actions}px` }}
+                            >
                               {isMasterAdmin && (
                                 <div className="flex justify-end gap-1">
                                   <Button variant="ghost" size="xs" onClick={() => handleEdit(delivery)}>
