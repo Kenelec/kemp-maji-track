@@ -33,6 +33,83 @@ export function DeliveriesSection() {
   const [deliveryToDelete, setDeliveryToDelete] = useState<string | null>(null);
   const [hasLinkedPayments, setHasLinkedPayments] = useState(false);
   
+  // NEW: Form state for editing
+  const [formData, setFormData] = useState({
+    customer_id: '',
+    delivery_date: '',
+    delivery_note_no: '',
+    qty: 0,
+    unit_rate: 0,
+    total_amount: 0,
+    delivery_items: [] as any[],
+    driver_id: ''
+  });
+
+  // NEW: Loading states for dependent data
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<any[]>([]);
+
+  // NEW: Load dependent data
+  useEffect(() => {
+    const loadData = async () => {
+      const [{ data: customersData }, { data: productsData }, { data: driversData }] = await Promise.all([
+        supabase.from('customers').select('*'),
+        supabase.from('products').select('*'),
+        supabase.from('drivers').select('*')
+      ]);
+      
+      setCustomers(customersData || []);
+      setProducts(productsData || []);
+      setDrivers(driversData || []);
+    };
+    
+    loadData();
+  }, []);
+
+  // NEW: Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'qty' || name === 'unit_rate' || name === 'total_amount' ? Number(value) : value
+    }));
+  };
+
+  // NEW: Handle delivery item changes
+  const handleDeliveryItemChange = (index: number, field: string, value: any) => {
+    setFormData(prev => {
+      const newItems = [...prev.delivery_items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, delivery_items: newItems };
+    });
+  };
+
+  // NEW: Add new delivery item
+  const addDeliveryItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      delivery_items: [
+        ...prev.delivery_items,
+        { product_id: '', product_name: '', quantity: 1, unit_price: 0, total_price: 0 }
+      ]
+    }));
+  };
+
+  // NEW: Remove delivery item
+  const removeDeliveryItem = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      delivery_items: prev.delivery_items.filter((_, i) => i !== index)
+    }));
+  };
+
+  // NEW: Calculate total amount
+  useEffect(() => {
+    const total = formData.delivery_items.reduce((sum, item) => sum + (item.total_price || 0), 0);
+    setFormData(prev => ({ ...prev, total_amount: total }));
+  }, [formData.delivery_items]);
+
   // NEW: Sorting state
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -247,6 +324,71 @@ export function DeliveriesSection() {
     return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock };
   };
 
+  // NEW: Update delivery mutation
+  const updateDeliveryMutation = useMutation({
+    mutationFn: async (deliveryData: any) => {
+      const { data, error } = await supabase
+        .from('deliveries')
+        .update({
+          customer_id: deliveryData.customer_id,
+          delivery_date: deliveryData.delivery_date,
+          delivery_note_no: deliveryData.delivery_note_no,
+          qty: deliveryData.qty,
+          unit_rate: deliveryData.unit_rate,
+          total_amount: deliveryData.total_amount,
+          driver_id: deliveryData.driver_id
+        })
+        .eq('id', deliveryData.id);
+
+      if (error) throw error;
+      
+      // Update delivery items
+      if (deliveryData.delivery_items) {
+        // First, delete existing items
+        await supabase
+          .from('delivery_items')
+          .delete()
+          .eq('delivery_id', deliveryData.id);
+        
+        // Then insert new items
+        if (deliveryData.delivery_items.length > 0) {
+          const itemsToInsert = deliveryData.delivery_items.map((item: any) => ({
+            delivery_id: deliveryData.id,
+            product_id: item.product_id,
+            product_name: item.product_name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.total_price
+          }));
+          
+          const { error: itemError } = await supabase
+            .from('delivery_items')
+            .insert(itemsToInsert);
+            
+          if (itemError) throw itemError;
+        }
+      }
+      
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      toast({
+        title: "Delivery updated",
+        description: "Delivery has been updated successfully.",
+      });
+      setIsFormOpen(false);
+      setEditingDelivery(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to update delivery: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -274,6 +416,18 @@ export function DeliveriesSection() {
   });
 
   const handleEdit = (delivery: any) => {
+    // Populate form data with delivery details
+    setFormData({
+      id: delivery.id,
+      customer_id: delivery.customer_id || '',
+      delivery_date: delivery.delivery_date || '',
+      delivery_note_no: delivery.delivery_note_no || '',
+      qty: delivery.qty || 0,
+      unit_rate: delivery.unit_rate || 0,
+      total_amount: delivery.total_amount || 0,
+      delivery_items: delivery.delivery_items || [],
+      driver_id: delivery.driver_id || ''
+    });
     setEditingDelivery(delivery);
     setIsFormOpen(true);
   };
@@ -295,6 +449,12 @@ export function DeliveriesSection() {
     if (deliveryToDelete) {
       deleteMutation.mutate(deliveryToDelete);
     }
+  };
+
+  // NEW: Handle form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateDeliveryMutation.mutate(formData);
   };
 
   // NEW: Reference for table container
@@ -689,10 +849,10 @@ export function DeliveriesSection() {
         </CardContent>
       </Card>
 
-      {/* CUSTOM MODAL FOR EDIT FORM - SOLID BACKGROUND */}
+      {/* EDIT FORM MODAL - FULLY EDITABLE */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
-          <div className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">
@@ -709,87 +869,188 @@ export function DeliveriesSection() {
                 </button>
               </div>
               
-              {/* Display delivery data for editing */}
-              <div className="space-y-4">
-                {editingDelivery ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Customer</label>
-                      <input 
-                        type="text" 
-                        className="w-full p-2 border rounded"
-                        defaultValue={editingDelivery.customers?.customer_name || ""}
-                        readOnly
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Delivery Date</label>
-                      <input 
-                        type="date" 
-                        className="w-full p-2 border rounded"
-                        defaultValue={editingDelivery.delivery_date.split('T')[0]}
-                        readOnly
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Delivery Note No</label>
-                      <input 
-                        type="text" 
-                        className="w-full p-2 border rounded"
-                        defaultValue={editingDelivery.delivery_note_no || ""}
-                        readOnly
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Quantity</label>
-                      <input 
-                        type="number" 
-                        className="w-full p-2 border rounded"
-                        defaultValue={editingDelivery.qty || 0}
-                        readOnly
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Unit Rate</label>
-                      <input 
-                        type="number" 
-                        className="w-full p-2 border rounded"
-                        defaultValue={editingDelivery.unit_rate || 0}
-                        readOnly
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Total Amount</label>
-                      <input 
-                        type="number" 
-                        className="w-full p-2 border rounded"
-                        defaultValue={editingDelivery.total_amount || 0}
-                        readOnly
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium mb-1">Products</label>
-                      <div className="border rounded p-2 max-h-20 overflow-y-auto">
-                        {editingDelivery.delivery_items && editingDelivery.delivery_items.length > 0 ? (
-                          editingDelivery.delivery_items.map((item: any, idx: number) => (
-                            <div key={idx} className="text-sm">
-                              {item.product_name} - Qty: {item.quantity}
-                            </div>
-                          ))
-                        ) : (
-                          <div>No products</div>
-                        )}
-                      </div>
-                    </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Customer *</label>
+                    <select
+                      name="customer_id"
+                      value={formData.customer_id}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full p-2 border rounded"
+                    >
+                      <option value="">Select Customer</option>
+                      {customers.map(customer => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customer_name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                ) : (
-                  <p className="text-center py-8 text-gray-500">
-                    Create new delivery form would appear here.
-                  </p>
-                )}
-                
-                <div className="flex justify-end space-x-2 mt-6">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Delivery Date *</label>
+                    <input
+                      type="date"
+                      name="delivery_date"
+                      value={formData.delivery_date}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full p-2 border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Delivery Note No.</label>
+                    <input
+                      type="text"
+                      name="delivery_note_no"
+                      value={formData.delivery_note_no}
+                      onChange={handleInputChange}
+                      className="w-full p-2 border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Driver</label>
+                    <select
+                      name="driver_id"
+                      value={formData.driver_id}
+                      onChange={handleInputChange}
+                      className="w-full p-2 border rounded"
+                    >
+                      <option value="">Select Driver</option>
+                      {drivers.map(driver => (
+                        <option key={driver.id} value={driver.id}>
+                          {driver.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      name="qty"
+                      value={formData.qty}
+                      onChange={handleInputChange}
+                      min="0"
+                      className="w-full p-2 border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Unit Rate</label>
+                    <input
+                      type="number"
+                      name="unit_rate"
+                      value={formData.unit_rate}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      className="w-full p-2 border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Total Amount</label>
+                    <input
+                      type="number"
+                      name="total_amount"
+                      value={formData.total_amount}
+                      readOnly
+                      className="w-full p-2 border rounded bg-gray-100"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium">Products</label>
+                    <button
+                      type="button"
+                      onClick={addDeliveryItem}
+                      className="text-sm bg-blue-600 text-white px-3 py-1 rounded"
+                    >
+                      Add Item
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {formData.delivery_items.map((item, index) => (
+                      <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 border p-2 rounded">
+                        <div>
+                          <label className="block text-xs mb-1">Product</label>
+                          <select
+                            value={item.product_id}
+                            onChange={(e) => {
+                              const selectedProduct = products.find(p => p.id === e.target.value);
+                              handleDeliveryItemChange(index, 'product_id', e.target.value);
+                              handleDeliveryItemChange(index, 'product_name', selectedProduct?.product_name);
+                              handleDeliveryItemChange(index, 'unit_price', selectedProduct?.unit_price);
+                              handleDeliveryItemChange(index, 'total_price', (selectedProduct?.unit_price || 0) * (item.quantity || 1));
+                            }}
+                            className="w-full p-2 border rounded text-sm"
+                          >
+                            <option value="">Select Product</option>
+                            {products.map(product => (
+                              <option key={product.id} value={product.id}>
+                                {product.product_name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs mb-1">Qty</label>
+                          <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const newQuantity = Number(e.target.value);
+                              handleDeliveryItemChange(index, 'quantity', newQuantity);
+                              handleDeliveryItemChange(index, 'total_price', (item.unit_price || 0) * newQuantity);
+                            }}
+                            min="1"
+                            className="w-full p-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs mb-1">Price</label>
+                          <input
+                            type="number"
+                            value={item.unit_price}
+                            onChange={(e) => {
+                              const newPrice = Number(e.target.value);
+                              handleDeliveryItemChange(index, 'unit_price', newPrice);
+                              handleDeliveryItemChange(index, 'total_price', newPrice * (item.quantity || 1));
+                            }}
+                            min="0"
+                            step="0.01"
+                            className="w-full p-2 border rounded text-sm"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <div className="w-full">
+                            <label className="block text-xs mb-1">Total</label>
+                            <input
+                              type="number"
+                              value={item.total_price}
+                              readOnly
+                              className="w-full p-2 border rounded text-sm bg-gray-100"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeDeliveryItem(index)}
+                            className="ml-2 text-red-600 hover:text-red-800"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-4">
                   <Button 
+                    type="button"
                     variant="outline" 
                     onClick={() => {
                       setIsFormOpen(false);
@@ -798,11 +1059,17 @@ export function DeliveriesSection() {
                   >
                     Cancel
                   </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    {editingDelivery ? "Update" : "Create"}
+                  <Button 
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={updateDeliveryMutation.isPending}
+                  >
+                    {updateDeliveryMutation.isPending 
+                      ? 'Updating...' 
+                      : editingDelivery ? 'Update Delivery' : 'Create Delivery'}
                   </Button>
                 </div>
-              </div>
+              </form>
             </div>
           </div>
         </div>
