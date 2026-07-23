@@ -197,7 +197,7 @@ export function DeliveriesSection() {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizing) {
         const deltaX = e.clientX - isResizing.startX;
-        const newWidth = Math.max(60, isResizing.startWidth + deltaX); // Minimum width of 60px
+        const newWidth = Math.max(80, isResizing.startWidth + deltaX); // Minimum width of 80px
         
         setColumnWidths(prev => ({
           ...prev,
@@ -368,138 +368,168 @@ export function DeliveriesSection() {
               {/* COMPACT SCROLLABLE CONTAINER */}
               <div className="h-[calc(100vh-280px)] overflow-y-auto">
                 {/* FIXED HEADER WITH CUSTOM COLUMN WIDTHS */}
-                <div className="sticky top-0 z-[1000] bg-background">
+                <div className="sticky top-0 z-[1000] bg-background border-b">
                   <Table className="min-w-max">
                     <TableHeader className="bg-background">
                       <TableRow className="hover:bg-transparent">
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000] !important text-xs py-1 px-2"
+                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000] !important text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.customer}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span onClick={() => handleSort('customers.customer_name')}>
+                          <div className="flex items-center justify-between w-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('customers.customer_name')}
+                            >
                               Customer {getSortIcon('customers.customer_name')}
                             </span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('customer', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.date}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span onClick={() => handleSort('delivery_date')}>
+                          <div className="flex items-center justify-between w-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('delivery_date')}
+                            >
                               Date {getSortIcon('delivery_date')}
                             </span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('date', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.driver}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span onClick={() => handleSort('drivers.name')}>
+                          <div className="flex items-center justify-between w-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('drivers.name')}
+                            >
                               Driver {getSortIcon('drivers.name')}
                             </span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('driver', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.note}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span onClick={() => handleSort('delivery_note_no')}>
+                          <div className="flex items-center justify-between w-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('delivery_note_no')}
+                            >
                               Note No. {getSortIcon('delivery_note_no')}
                             </span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('note', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="text-xs py-1 px-2"
+                          className="text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.products}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span>Products</span>
+                          <div className="flex items-center justify-between w-full">
+                            <span className="flex-1 text-left">Products</span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('products', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="text-xs py-1 px-2"
+                          className="text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.qty}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span>Qty</span>
+                          <div className="flex items-center justify-between w-full">
+                            <span className="flex-1 text-left">Qty</span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('qty', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.rate}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span onClick={() => handleSort('unit_rate')}>
+                          <div className="flex items-center justify-between w-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('unit_rate')}
+                            >
                               Rate {getSortIcon('unit_rate')}
                             </span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('rate', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.total}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span onClick={() => handleSort('total_amount')}>
+                          <div className="flex items-center justify-between w-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('total_amount')}
+                            >
                               Total {getSortIcon('total_amount')}
                             </span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('total', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.status}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span onClick={() => handleSort('payment_status')}>
+                          <div className="flex items-center justify-between w-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('payment_status')}
+                            >
                               Status {getSortIcon('payment_status')}
                             </span>
                             <div
-                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize"
+                              className="resizer w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize ml-1"
                               onMouseDown={(e) => handleResizeStart('status', e)}
+                              style={{ cursor: 'col-resize' }}
                             />
                           </div>
                         </TableHead>
                         <TableHead 
-                          className="text-right sticky right-0 bg-background z-[2000] !important text-xs py-1 px-2"
+                          className="text-right sticky right-0 bg-background z-[2000] !important text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.actions}px` }}
                         >
-                          <div className="flex items-center justify-between">
-                            <span>Actions</span>
+                          <div className="flex items-center justify-between w-full">
+                            <span className="flex-1 text-left">Actions</span>
                             {/* No resizer for last column */}
                           </div>
                         </TableHead>
@@ -518,37 +548,37 @@ export function DeliveriesSection() {
                         return (
                           <TableRow key={delivery.id} className="hover:bg-gray-50">
                             <TableCell 
-                              className="font-medium sticky left-0 bg-background z-[1500] !important text-xs py-1 px-2"
+                              className="font-medium sticky left-0 bg-background z-[1500] !important text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.customer}px` }}
                             >
                               {delivery.customers?.customer_name || "Unknown"}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2"
+                              className="text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.date}px` }}
                             >
                               {format(new Date(delivery.delivery_date), "dd/MM")}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2"
+                              className="text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.driver}px` }}
                             >
                               {(delivery as any).drivers?.name || "—"}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2"
+                              className="text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.note}px` }}
                             >
                               {delivery.delivery_note_no || "—"}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2"
+                              className="text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.products}px` }}
                             >
                               {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
-                                <div className="truncate max-w-full">
+                                <div className="max-h-12 overflow-y-auto">
                                   {delivery.delivery_items.map((item, idx) => (
-                                    <div key={idx} className="truncate">
+                                    <div key={idx} className="truncate text-xs">
                                       {item.product_name}
                                     </div>
                                   ))}
@@ -558,25 +588,25 @@ export function DeliveriesSection() {
                               )}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2"
+                              className="text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.qty}px` }}
                             >
                               {delivery.qty}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2"
+                              className="text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.rate}px` }}
                             >
                               {Number(delivery.unit_rate).toLocaleString()}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2 font-semibold"
+                              className="text-xs py-1 px-2 font-semibold text-center"
                               style={{ width: `${columnWidths.total}px` }}
                             >
                               {Number(delivery.total_amount).toLocaleString()}
                             </TableCell>
                             <TableCell 
-                              className="text-xs py-1 px-2"
+                              className="text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.status}px` }}
                             >
                               <Badge className={`${confirmStatus.color} text-[10px]`} variant="secondary">
@@ -584,11 +614,11 @@ export function DeliveriesSection() {
                               </Badge>
                             </TableCell>
                             <TableCell 
-                              className="text-right sticky right-0 bg-background z-[1500] !important text-xs py-1 px-2"
+                              className="text-right sticky right-0 bg-background z-[1500] !important text-xs py-1 px-2 text-center"
                               style={{ width: `${columnWidths.actions}px` }}
                             >
                               {isMasterAdmin && (
-                                <div className="flex justify-end gap-1">
+                                <div className="flex justify-center gap-1">
                                   <Button variant="ghost" size="xs" onClick={() => handleEdit(delivery)}>
                                     <Pencil className="w-3 h-3" />
                                   </Button>
