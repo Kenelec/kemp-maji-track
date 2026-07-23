@@ -35,6 +35,7 @@ export function DeliveriesSection() {
   
   // NEW: Form state for editing
   const [formData, setFormData] = useState({
+    id: '',
     customer_id: '',
     delivery_date: '',
     delivery_note_no: '',
@@ -324,10 +325,11 @@ export function DeliveriesSection() {
     return { label: "Open", color: "bg-yellow-100 text-yellow-800", icon: Clock };
   };
 
-  // NEW: Update delivery mutation
+  // NEW: Update delivery mutation with proper error handling
   const updateDeliveryMutation = useMutation({
     mutationFn: async (deliveryData: any) => {
-      const { data, error } = await supabase
+      // Update delivery record
+      const { data: deliveryDataResult, error: deliveryError } = await supabase
         .from('deliveries')
         .update({
           customer_id: deliveryData.customer_id,
@@ -340,17 +342,19 @@ export function DeliveriesSection() {
         })
         .eq('id', deliveryData.id);
 
-      if (error) throw error;
-      
-      // Update delivery items
+      if (deliveryError) throw deliveryError;
+
+      // Handle delivery items
       if (deliveryData.delivery_items) {
-        // First, delete existing items
-        await supabase
+        // First, delete existing items for this delivery
+        const { error: deleteError } = await supabase
           .from('delivery_items')
           .delete()
           .eq('delivery_id', deliveryData.id);
         
-        // Then insert new items
+        if (deleteError) throw deleteError;
+        
+        // Then insert new items if any exist
         if (deliveryData.delivery_items.length > 0) {
           const itemsToInsert = deliveryData.delivery_items.map((item: any) => ({
             delivery_id: deliveryData.id,
@@ -369,7 +373,7 @@ export function DeliveriesSection() {
         }
       }
       
-      return data;
+      return deliveryDataResult;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
@@ -380,10 +384,11 @@ export function DeliveriesSection() {
       setIsFormOpen(false);
       setEditingDelivery(null);
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      console.error('Update error:', error);
       toast({
         title: "Error",
-        description: `Failed to update delivery: ${error.message}`,
+        description: `Failed to update delivery: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
     },
@@ -416,7 +421,7 @@ export function DeliveriesSection() {
   });
 
   const handleEdit = (delivery: any) => {
-    // Populate form data with delivery details
+    // Populate form data with delivery details including existing items
     setFormData({
       id: delivery.id,
       customer_id: delivery.customer_id || '',
@@ -849,7 +854,7 @@ export function DeliveriesSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - FULLY EDITABLE */}
+      {/* EDIT FORM MODAL - FIXED */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -978,12 +983,12 @@ export function DeliveriesSection() {
                         <div>
                           <label className="block text-xs mb-1">Product</label>
                           <select
-                            value={item.product_id}
+                            value={item.product_id || ''}
                             onChange={(e) => {
                               const selectedProduct = products.find(p => p.id === e.target.value);
                               handleDeliveryItemChange(index, 'product_id', e.target.value);
-                              handleDeliveryItemChange(index, 'product_name', selectedProduct?.product_name);
-                              handleDeliveryItemChange(index, 'unit_price', selectedProduct?.unit_price);
+                              handleDeliveryItemChange(index, 'product_name', selectedProduct?.product_name || '');
+                              handleDeliveryItemChange(index, 'unit_price', selectedProduct?.unit_price || 0);
                               handleDeliveryItemChange(index, 'total_price', (selectedProduct?.unit_price || 0) * (item.quantity || 1));
                             }}
                             className="w-full p-2 border rounded text-sm"
