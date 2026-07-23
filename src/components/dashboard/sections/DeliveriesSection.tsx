@@ -1017,17 +1017,27 @@ export function DeliveriesSection() {
                               value={item.product_id || ''}
                               onChange={(e) => {
                                 const selectedProduct = products.find(p => p.id === e.target.value);
-                                handleDeliveryItemChange(index, 'product_id', e.target.value);
-                                handleDeliveryItemChange(index, 'product_name', selectedProduct?.product_name || '');
-                                handleDeliveryItemChange(index, 'unit_price', selectedProduct?.unit_price || 0);
-                                handleDeliveryItemChange(index, 'total_price', calculateItemTotal(item.quantity || 1, selectedProduct?.unit_price || 0));
+                                const newPrice = selectedProduct?.unit_price || 0;
+                                const newQty = item.quantity || 1;
+                                setFormData(prev => {
+                                  const newItems = [...prev.delivery_items];
+                                  newItems[index] = {
+                                    ...newItems[index],
+                                    product_id: e.target.value,
+                                    product_name: selectedProduct?.name || '',
+                                    unit_price: newPrice,
+                                    quantity: newQty,
+                                    total_price: newQty * newPrice,
+                                  };
+                                  return { ...prev, delivery_items: newItems };
+                                });
                               }}
                               className="w-full p-2 border rounded text-sm"
                             >
                               <option value="">Select Product</option>
                               {products.map(product => (
                                 <option key={product.id} value={product.id}>
-                                  {product.product_name}
+                                  {product.name}
                                 </option>
                               ))}
                             </select>
