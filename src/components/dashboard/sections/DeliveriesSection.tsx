@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle, CreditCard } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle, CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { DeliveryFormDialog } from "../forms/DeliveryFormDialog";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, addMonths, getMonth, getYear, format as formatDate } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,9 +37,16 @@ export function DeliveriesSection() {
   // NEW: Sorting state
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
+  // NEW: Monthly navigation
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+
+  // NEW: Calculate month range
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
 
   const { data: deliveries, isLoading } = useQuery({
-    queryKey: ["deliveries"],
+    queryKey: ["deliveries", monthStart.toISOString(), monthEnd.toISOString()],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deliveries")
@@ -54,8 +61,9 @@ export function DeliveriesSection() {
           ),
           delivery_queries (id, status)
         `)
-        // NEW: Remove ordering from query since we'll sort client-side
-        // .order(sortField || "delivery_date", { ascending: sortOrder === 'asc' });
+        .gte("delivery_date", monthStart.toISOString().split('T')[0])
+        .lte("delivery_date", monthEnd.toISOString().split('T')[0])
+        .order("delivery_date", { ascending: false }); // Order by date descending
       
       if (error) throw error;
       return data;
@@ -131,6 +139,16 @@ export function DeliveriesSection() {
       return sortOrder === 'asc' ? comparison : -comparison;
     });
   }, [deliveries, sortField, sortOrder]);
+
+  // NEW: Navigate to previous month
+  const goToPreviousMonth = () => {
+    setCurrentMonth(prev => subMonths(prev, 1));
+  };
+
+  // NEW: Navigate to next month
+  const goToNextMonth = () => {
+    setCurrentMonth(prev => addMonths(prev, 1));
+  };
 
   // NEW: Handle column sorting
   const handleSort = (field: string) => {
@@ -226,100 +244,132 @@ export function DeliveriesSection() {
   // NEW: Reference for table container to enable horizontal scrolling
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
+  // NEW: Format month display
+  const formattedMonth = formatDate(currentMonth, 'MMMM yyyy');
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      {/* COMPACT HEADER */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Deliveries</h2>
-          <p className="text-muted-foreground">Manage water deliveries</p>
+          <h2 className="text-xl font-bold text-foreground">Deliveries</h2>
+          <p className="text-xs text-muted-foreground">Manage water deliveries</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsExcelUploadOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import Excel
+        <div className="flex gap-1">
+          <Button variant="outline" size="sm" onClick={() => setIsExcelUploadOpen(true)}>
+            <Upload className="w-3 h-3 mr-1" />
+            Import
           </Button>
-          <Button className="bg-gradient-primary" onClick={() => setIsFormOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            New Delivery
+          <Button className="bg-gradient-primary" size="sm" onClick={() => setIsFormOpen(true)}>
+            <Plus className="w-3 h-3 mr-1" />
+            New
           </Button>
         </div>
       </div>
       
       <Card>
-        <CardHeader>
-          <CardTitle>Recent Deliveries</CardTitle>
-          <CardDescription>Track and manage all water deliveries</CardDescription>
+        {/* COMPACT CARD HEADER */}
+        <CardHeader className="p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm">All Deliveries - {formattedMonth}</CardTitle>
+              <CardDescription className="text-xs mt-1">
+                Showing {sortedDeliveries?.length || 0} deliveries
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToPreviousMonth}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-medium min-w-[120px] text-center">
+                {formattedMonth}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToNextMonth}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="text-center py-6 text-muted-foreground text-sm">Loading...</div>
           ) : !sortedDeliveries || sortedDeliveries.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No deliveries found. Create your first delivery to get started.
+            <div className="text-center py-6 text-muted-foreground text-sm">
+              No deliveries found for {formattedMonth}.
             </div>
           ) : (
             <div 
               ref={tableContainerRef}
               className="overflow-x-auto"
             >
-              {/* NEW: Scrollable container with fixed height */}
-              <div className="h-[60vh] overflow-y-auto">
-                {/* NEW: Fixed header container with highest z-index */}
+              {/* COMPACT SCROLLABLE CONTAINER */}
+              <div className="h-[calc(100vh-280px)] overflow-y-auto">
+                {/* FIXED HEADER */}
                 <div className="sticky top-0 z-[1000] bg-background">
                   <Table className="min-w-[1200px]">
                     <TableHeader className="bg-background">
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000] !important"
+                          className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000] !important text-xs py-1 px-2"
                           onClick={() => handleSort('customers.customer_name')}
                         >
                           Customer {getSortIcon('customers.customer_name')}
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
                           onClick={() => handleSort('delivery_date')}
                         >
-                          Delivery Date {getSortIcon('delivery_date')}
+                          Date {getSortIcon('delivery_date')}
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
                           onClick={() => handleSort('drivers.name')}
                         >
                           Driver {getSortIcon('drivers.name')}
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
                           onClick={() => handleSort('delivery_note_no')}
                         >
-                          Delivery Note No. {getSortIcon('delivery_note_no')}
+                          Note No. {getSortIcon('delivery_note_no')}
                         </TableHead>
-                        <TableHead>Products</TableHead>
-                        <TableHead>Quantity</TableHead> {/* REMOVED SORTING */}
+                        <TableHead className="text-xs py-1 px-2">Products</TableHead>
+                        <TableHead className="text-xs py-1 px-2">Qty</TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
                           onClick={() => handleSort('unit_rate')}
                         >
-                          Unit Rate {getSortIcon('unit_rate')}
+                          Rate {getSortIcon('unit_rate')}
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100"
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
                           onClick={() => handleSort('total_amount')}
                         >
-                          Total Amount {getSortIcon('total_amount')}
+                          Total {getSortIcon('total_amount')}
                         </TableHead>
                         <TableHead 
-                          className="cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleSort('payment_status')} // FIXED: Added sorting to confirmation column
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2"
+                          onClick={() => handleSort('payment_status')}
                         >
-                          Confirmation {getSortIcon('payment_status')}
+                          Status {getSortIcon('payment_status')}
                         </TableHead>
-                        <TableHead className="text-right sticky right-0 bg-background z-[2000] !important">Actions</TableHead>
+                        <TableHead className="text-right sticky right-0 bg-background z-[2000] !important text-xs py-1 px-2">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                   </Table>
                 </div>
                 
-                {/* NEW: Data rows with lower z-index to prevent overlapping */}
+                {/* COMPACT DATA ROWS */}
                 <div className="relative z-[500]">
                   <Table className="min-w-[1200px]">
                     <TableBody>
@@ -327,41 +377,50 @@ export function DeliveriesSection() {
                         const confirmStatus = getConfirmationStatus(delivery);
                         const StatusIcon = confirmStatus.icon;
                         return (
-                          <TableRow key={delivery.id}>
-                            <TableCell className="font-medium sticky left-0 bg-background z-[1500] !important">
+                          <TableRow key={delivery.id} className="hover:bg-gray-50">
+                            <TableCell className="font-medium sticky left-0 bg-background z-[1500] !important text-xs py-1 px-2">
                               {delivery.customers?.customer_name || "Unknown"}
                             </TableCell>
-                            <TableCell>{format(new Date(delivery.delivery_date), "MMM dd, yyyy")}</TableCell>
-                            <TableCell>
+                            <TableCell className="text-xs py-1 px-2">
+                              {format(new Date(delivery.delivery_date), "dd/MM")}
+                            </TableCell>
+                            <TableCell className="text-xs py-1 px-2">
                               {(delivery as any).drivers?.name || "—"}
                             </TableCell>
-                            <TableCell>{delivery.delivery_note_no || "—"}</TableCell>
-                            <TableCell>
+                            <TableCell className="text-xs py-1 px-2">
+                              {delivery.delivery_note_no || "—"}
+                            </TableCell>
+                            <TableCell className="text-xs py-1 px-2">
                               {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
-                                delivery.delivery_items.map((item: any, idx: number) => (
-                                  <div key={idx}>{item.product_name}</div>
-                                ))
+                                <div className="max-w-[100px] truncate">
+                                  {delivery.delivery_items[0]?.product_name || "—"}
+                                </div>
                               ) : (
                                 "—"
                               )}
                             </TableCell>
-                            <TableCell>{delivery.qty}</TableCell> {/* NO SORTING */}
-                            <TableCell>KSh {Number(delivery.unit_rate).toLocaleString()}</TableCell>
-                            <TableCell className="font-semibold">KSh {Number(delivery.total_amount).toLocaleString()}</TableCell>
-                            <TableCell>
-                              <Badge className={confirmStatus.color}>
-                                <StatusIcon className="w-3 h-3 mr-1" />
+                            <TableCell className="text-xs py-1 px-2">
+                              {delivery.qty}
+                            </TableCell>
+                            <TableCell className="text-xs py-1 px-2">
+                              {Number(delivery.unit_rate).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-xs py-1 px-2 font-semibold">
+                              {Number(delivery.total_amount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-xs py-1 px-2">
+                              <Badge className={`${confirmStatus.color} text-[10px]`} variant="secondary">
                                 {confirmStatus.label}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right sticky right-0 bg-background z-[1500] !important">
+                            <TableCell className="text-right sticky right-0 bg-background z-[1500] !important text-xs py-1 px-2">
                               {isMasterAdmin && (
-                                <div className="flex justify-end gap-2">
-                                  <Button variant="ghost" size="sm" onClick={() => handleEdit(delivery)}>
-                                    <Pencil className="w-4 h-4" />
+                                <div className="flex justify-end gap-1">
+                                  <Button variant="ghost" size="xs" onClick={() => handleEdit(delivery)}>
+                                    <Pencil className="w-3 h-3" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => handleDelete(delivery.id)}>
-                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                  <Button variant="ghost" size="xs" onClick={() => handleDelete(delivery.id)}>
+                                    <Trash2 className="w-3 h-3" />
                                   </Button>
                                 </div>
                               )}
