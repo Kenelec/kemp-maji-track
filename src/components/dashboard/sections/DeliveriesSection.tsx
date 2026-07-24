@@ -84,6 +84,9 @@ export function DeliveriesSection() {
         setCustomers(customersData || []);
         setProducts(productsWithPrices);
         setDrivers(driversData || []);
+        setCustomers((customersData || []).slice().sort((a: any, b: any) =>
+          (a.customer_name || '').localeCompare(b.customer_name || '', undefined, { sensitivity: 'base' })
+        ));
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
