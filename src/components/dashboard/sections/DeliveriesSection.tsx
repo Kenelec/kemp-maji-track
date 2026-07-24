@@ -1077,13 +1077,33 @@ export function DeliveriesSection() {
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.qty}px` }}
                             >
-                              {delivery.qty}
+                              {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
+                                <div className="max-h-12 overflow-y-auto">
+                                  {delivery.delivery_items.map((item, idx) => (
+                                    <div key={idx} className="text-xs">
+                                      {Number(item.quantity || 0)}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                delivery.qty
+                              )}
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.rate}px` }}
                             >
-                              {Number(delivery.unit_rate).toLocaleString()}
+                              {delivery.delivery_items && delivery.delivery_items.length > 0 ? (
+                                <div className="max-h-12 overflow-y-auto">
+                                  {delivery.delivery_items.map((item, idx) => (
+                                    <div key={idx} className="text-xs">
+                                      {Number(item.unit_price || 0).toLocaleString()}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                Number(delivery.unit_rate).toLocaleString()
+                              )}
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 font-semibold text-center align-middle"
