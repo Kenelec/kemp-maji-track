@@ -365,7 +365,7 @@ export function PaymentsSection() {
             amount: creditAmount,
             due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
-            status: 'credit'
+            status: 'credit' // This is allowed in the database for credit
           }]);
       }
       
@@ -459,7 +459,7 @@ export function PaymentsSection() {
             amount: creditAmount,
             due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
-            status: 'credit'
+            status: 'credit' // This is allowed in the database for credit
           }]);
       }
       
@@ -1158,12 +1158,12 @@ export function PaymentsSection() {
                       <input
                         type="number"
                         name="new_payment_amount"
-                        value={formData.new_payment_amount}
+                        value={formData.new_payment_amount || ''}
                         onChange={handleInputChange}
                         min="0"
                         required
                         className="w-full p-2 border rounded"
-                        placeholder="Enter amount to pay" // NEW: Placeholder instead of 0
+                        placeholder="Enter amount to pay"
                       />
                     </div>
                     <div>
