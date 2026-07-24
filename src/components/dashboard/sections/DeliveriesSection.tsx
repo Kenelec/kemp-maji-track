@@ -59,7 +59,7 @@ export function DeliveriesSection() {
       setLoadingProducts(true);
       try {
         const [{ data: customersData }, { data: productsData }, { data: driversData }, { data: recentItemPrices }] = await Promise.all([
-          supabase.from('customers').select('*').order('customer_name'),
+          supabase.from('customers').select('*'),
           supabase.from('products').select('*').order('name'),
           supabase.from('drivers').select('*').order('name'),
           supabase.from('delivery_items').select('product_id, unit_price').gt('unit_price', 0)
