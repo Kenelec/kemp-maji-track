@@ -307,18 +307,21 @@ export function PaymentsSection() {
 
   const getStatusColor = (status: string) => {
     if (status === 'paid') return "bg-green-500/10 text-green-500";
-    if (status === 'partial') return "bg-orange-500/10 text-orange-500";
-    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
     if (status === 'overdue') return "bg-red-500/10 text-red-500";
-    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
+    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
+    if (status === 'pending_verification') return "bg-orange-500/10 text-orange-500";
+    if (status === 'rejected') return "bg-red-500/10 text-red-500";
+    if (status === 'failed') return "bg-red-500/10 text-red-500";
+    if (status === 'completed') return "bg-green-500/10 text-green-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation with raw status (no validation)
+  // NEW: Create payment mutation with correct status values
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Use the raw status without validation - let the database handle it
-      const finalStatus = paymentData.status || 'pending';
+      // Use only status values that are allowed by the constraint
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
+      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
@@ -327,14 +330,14 @@ export function PaymentsSection() {
       
       // Calculate new total and determine status
       const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
-      let finalStatusCalculated = 'partial';
+      let finalStatusCalculated = 'pending';
       
       if (newTotalPaid >= deliveryTotal) {
         finalStatusCalculated = 'paid';
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'partial';
+        finalStatusCalculated = 'pending';
       }
       
       // Create the payment record
@@ -365,7 +368,7 @@ export function PaymentsSection() {
             amount: creditAmount,
             due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
-            status: 'credit' // This is allowed in the database for credit
+            status: 'pending' // Use allowed status for credit
           }]);
       }
       
@@ -407,11 +410,12 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation with raw status (no validation)
+  // NEW: Update payment mutation with correct status values
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Use the raw status without validation - let the database handle it
-      const finalStatus = paymentData.status || 'pending';
+      // Use only status values that are allowed by the constraint
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
+      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
@@ -420,14 +424,14 @@ export function PaymentsSection() {
       
       // Calculate new total and determine status
       const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
-      let finalStatusCalculated = 'partial';
+      let finalStatusCalculated = 'pending';
       
       if (newTotalPaid >= deliveryTotal) {
         finalStatusCalculated = 'paid';
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'partial';
+        finalStatusCalculated = 'pending';
       }
       
       // Create the payment record
@@ -458,7 +462,7 @@ export function PaymentsSection() {
             amount: creditAmount,
             due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
-            status: 'credit' // This is allowed in the database for credit
+            status: 'pending' // Use allowed status for credit
           }]);
       }
       
@@ -1207,9 +1211,11 @@ export function PaymentsSection() {
                       >
                         <option value="pending">Pending</option>
                         <option value="paid">Paid</option>
-                        <option value="partial">Partial</option>
                         <option value="overdue">Overdue</option>
-                        <option value="credit">Credit</option>
+                        <option value="pending_verification">Pending Verification</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="failed">Failed</option>
+                        <option value="completed">Completed</option>
                       </select>
                     </div>
                   </div>
