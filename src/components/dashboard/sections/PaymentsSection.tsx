@@ -34,14 +34,14 @@ export function PaymentsSection() {
   
   // NEW: Form state for editing
   const [formData, setFormData] = useState({
-    id: '',
     customer_id: '',
     delivery_id: '',
     amount: 0,
     due_date: '',
     payment_method: 'cash',
     mpesa_code: '',
-    status: 'pending'
+    status: 'pending',
+    new_payment_amount: 0 // NEW: Separate field for new payment
   });
 
   // NEW: Loading states for dependent data
@@ -83,13 +83,21 @@ export function PaymentsSection() {
     loadData();
   }, [toast]);
 
+  // NEW: Calculate total paid for a delivery
+  const calculateTotalPaid = (deliveryId: string) => {
+    if (!payments) return 0;
+    
+    const deliveryPayments = payments.filter((p: any) => p.delivery_id === deliveryId);
+    return deliveryPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  };
+
   // NEW: Calculate balance for a delivery
-  const calculateBalance = (delivery: any) => {
+  const calculateBalance = (deliveryId: string) => {
+    const delivery = deliveries.find((d: any) => d.id === deliveryId);
     if (!delivery) return 0;
     
     const totalAmount = Number(delivery.total_amount || 0);
-    // Calculate total paid amount for this delivery
-    const totalPaid = 0; // This would need to come from payments table
+    const totalPaid = calculateTotalPaid(deliveryId);
     return totalAmount - totalPaid;
   };
 
@@ -100,21 +108,18 @@ export function PaymentsSection() {
     
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'amount' ? Number(val) : val
+      [name]: name === 'amount' || name === 'new_payment_amount' ? Number(val) : val
     }));
   };
 
-  // NEW: Handle delivery change to update amount based on balance
+  // NEW: Handle delivery change to update balance
   const handleDeliveryChange = (deliveryId: string) => {
-    const delivery = deliveries.find(d => d.id === deliveryId);
-    if (delivery) {
-      const balance = calculateBalance(delivery);
-      setFormData(prev => ({
-        ...prev,
-        delivery_id: deliveryId,
-        amount: Math.min(balance, prev.amount) // Don't exceed balance
-      }));
-    }
+    const balance = calculateBalance(deliveryId);
+    setFormData(prev => ({
+      ...prev,
+      delivery_id: deliveryId,
+      new_payment_amount: Math.min(balance, prev.new_payment_amount) // Don't exceed balance
+    }));
   };
 
   // NEW: Sorting state
@@ -301,26 +306,41 @@ export function PaymentsSection() {
   }, [isResizing]);
 
   const getStatusColor = (status: string) => {
-    if (status === 'paid') return "bg-green-500/10 text-green-500";
-    if (status === 'partial') return "bg-orange-500/10 text-orange-500";
+    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
     if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
+    if (status === 'paid') return "bg-green-500/10 text-green-500";
     if (status === 'overdue') return "bg-red-500/10 text-red-500";
+    if (status === 'partial') return "bg-orange-500/10 text-orange-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation with only allowed status values
+  // NEW: Create payment mutation with credit handling
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Only use status values that are definitely allowed by your constraint
-      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
-      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
+      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
+      const totalPaid = calculateTotalPaid(paymentData.delivery_id);
+      const deliveryTotal = Number(delivery?.total_amount || 0);
+      const balance = deliveryTotal - totalPaid;
       
-      const { data, error } = await supabase
+      // Calculate new total and determine status
+      const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
+      let finalStatus = 'partial';
+      
+      if (newTotalPaid >= deliveryTotal) {
+        finalStatus = 'paid';
+      } else if (newTotalPaid === 0) {
+        finalStatus = 'pending';
+      } else if (newTotalPaid < deliveryTotal) {
+        finalStatus = 'partial';
+      }
+      
+      // Create the payment record
+      const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
-          amount: paymentData.amount,
+          amount: paymentData.new_payment_amount,
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
@@ -329,11 +349,34 @@ export function PaymentsSection() {
         .select()
         .single();
 
-      if (error) throw error;
-      return data;
+      if (paymentError) throw paymentError;
+      
+      // Check if there's overpayment that should become credit
+      if (newTotalPaid > deliveryTotal) {
+        const creditAmount = newTotalPaid - deliveryTotal;
+        
+        await supabase
+          .from('payments')
+          .insert([{
+            customer_id: paymentData.customer_id,
+            amount: creditAmount,
+            due_date: new Date().toISOString().split('T')[0],
+            payment_method: paymentData.payment_method,
+            status: 'credit'
+          }]);
+      }
+      
+      // Update delivery payment status
+      await supabase
+        .from('deliveries')
+        .update({ payment_status: finalStatus })
+        .eq('id', paymentData.delivery_id);
+
+      return payment;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       toast({
         title: "Payment created",
         description: "Payment has been created successfully.",
@@ -341,14 +384,14 @@ export function PaymentsSection() {
       setIsFormOpen(false);
       setEditingPayment(null);
       setFormData({
-        id: '',
         customer_id: '',
         delivery_id: '',
         amount: 0,
         due_date: '',
         payment_method: 'cash',
         mpesa_code: '',
-        status: 'pending'
+        status: 'pending',
+        new_payment_amount: 0
       });
     },
     onError: (error: any) => {
@@ -361,33 +404,69 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation with only allowed status values
+  // NEW: Update payment mutation with credit handling
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Only use status values that are definitely allowed by your constraint
-      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
-      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
+      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
+      const totalPaid = calculateTotalPaid(paymentData.delivery_id);
+      const deliveryTotal = Number(delivery?.total_amount || 0);
+      const balance = deliveryTotal - totalPaid;
       
-      const { data, error } = await supabase
+      // Calculate new total and determine status
+      const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
+      let finalStatus = 'partial';
+      
+      if (newTotalPaid >= deliveryTotal) {
+        finalStatus = 'paid';
+      } else if (newTotalPaid === 0) {
+        finalStatus = 'pending';
+      } else if (newTotalPaid < deliveryTotal) {
+        finalStatus = 'partial';
+      }
+      
+      // Create the payment record
+      const { data: payment, error: paymentError } = await supabase
         .from('payments')
-        .update({
+        .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
-          amount: paymentData.amount,
+          amount: paymentData.new_payment_amount,
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatus
-        })
-        .eq('id', paymentData.id)
+        }])
         .select()
         .single();
 
-      if (error) throw error;
-      return data;
+      if (paymentError) throw paymentError;
+      
+      // Check if there's overpayment that should become credit
+      if (newTotalPaid > deliveryTotal) {
+        const creditAmount = newTotalPaid - deliveryTotal;
+        
+        await supabase
+          .from('payments')
+          .insert([{
+            customer_id: paymentData.customer_id,
+            amount: creditAmount,
+            due_date: new Date().toISOString().split('T')[0],
+            payment_method: paymentData.payment_method,
+            status: 'credit'
+          }]);
+      }
+      
+      // Update delivery payment status
+      await supabase
+        .from('deliveries')
+        .update({ payment_status: finalStatus })
+        .eq('id', paymentData.delivery_id);
+
+      return payment;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       toast({
         title: "Payment updated",
         description: "Payment has been updated successfully.",
@@ -395,14 +474,14 @@ export function PaymentsSection() {
       setIsFormOpen(false);
       setEditingPayment(null);
       setFormData({
-        id: '',
         customer_id: '',
         delivery_id: '',
         amount: 0,
         due_date: '',
         payment_method: 'cash',
         mpesa_code: '',
-        status: 'pending'
+        status: 'pending',
+        new_payment_amount: 0
       });
     },
     onError: (error: any) => {
@@ -442,16 +521,20 @@ export function PaymentsSection() {
   });
 
   const handleEdit = (payment: any) => {
-    // Populate form data with payment details
+    const deliveryId = payment.delivery_id;
+    const totalPaid = calculateTotalPaid(deliveryId);
+    const balance = calculateBalance(deliveryId);
+    
+    // Populate form data with delivery details and calculated amounts
     setFormData({
-      id: payment.id,
       customer_id: payment.customer_id || '',
       delivery_id: payment.delivery_id || '',
-      amount: payment.amount || 0,
+      amount: totalPaid, // Show total paid so far
       due_date: payment.due_date || '',
       payment_method: payment.payment_method || 'cash',
       mpesa_code: payment.mpesa_code || '',
-      status: payment.status || 'pending'
+      status: payment.status || 'pending',
+      new_payment_amount: Math.min(balance, 1000) // Default to balance or 1000
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -472,7 +555,7 @@ export function PaymentsSection() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingPayment && formData.id) {
+    if (editingPayment) {
       updatePaymentMutation.mutate(formData);
     } else {
       createPaymentMutation.mutate(formData);
@@ -501,14 +584,14 @@ export function PaymentsSection() {
           <Button className="bg-gradient-primary" size="sm" onClick={() => {
             setEditingPayment(null);
             setFormData({
-              id: '',
               customer_id: '',
               delivery_id: '',
               amount: 0,
               due_date: '',
               payment_method: 'cash',
               mpesa_code: '',
-              status: 'pending'
+              status: 'pending',
+              new_payment_amount: 0
             });
             setIsFormOpen(true);
           }}>
@@ -839,8 +922,8 @@ export function PaymentsSection() {
                     <TableBody>
                       {sortedPayments.map((payment) => {
                         const deliveryTotal = payment.deliveries?.total_amount || 0;
-                        const paidAmount = payment.amount || 0;
-                        const balance = deliveryTotal - paidAmount;
+                        const totalPaid = calculateTotalPaid(payment.delivery_id);
+                        const balance = deliveryTotal - totalPaid;
                         const statusColor = getStatusColor(payment.status);
                         
                         return (
@@ -905,7 +988,7 @@ export function PaymentsSection() {
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.amount}px` }}
                             >
-                              KSh {Number(paidAmount).toLocaleString()}
+                              KSh {Number(totalPaid).toLocaleString()}
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
@@ -978,7 +1061,7 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - WITH ONLY ALLOWED STATUS VALUES */}
+      {/* EDIT FORM MODAL - WITH CREDIT SYSTEM */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1029,19 +1112,32 @@ export function PaymentsSection() {
                         className="w-full p-2 border rounded"
                       >
                         <option value="">Select Delivery</option>
-                        {deliveries.filter(d => d.customer_id === formData.customer_id).map(delivery => (
-                          <option key={delivery.id} value={delivery.id}>
-                            {delivery.delivery_note_no} - KSh {Number(delivery.total_amount).toLocaleString()}
-                          </option>
-                        ))}
+                        {deliveries.filter(d => d.customer_id === formData.customer_id).map(delivery => {
+                          const totalPaid = calculateTotalPaid(delivery.id);
+                          const balance = delivery.total_amount - totalPaid;
+                          return (
+                            <option key={delivery.id} value={delivery.id}>
+                              {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Amount *</label>
+                      <label className="block text-sm font-medium mb-1">Total Amount Paid So Far</label>
                       <input
                         type="number"
-                        name="amount"
                         value={formData.amount}
+                        readOnly
+                        className="w-full p-2 border rounded bg-gray-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Amount to Pay Now *</label>
+                      <input
+                        type="number"
+                        name="new_payment_amount"
+                        value={formData.new_payment_amount}
                         onChange={handleInputChange}
                         min="0"
                         required
@@ -1092,6 +1188,7 @@ export function PaymentsSection() {
                         <option value="paid">Paid</option>
                         <option value="partial">Partial</option>
                         <option value="overdue">Overdue</option>
+                        <option value="credit">Credit</option>
                       </select>
                     </div>
                   </div>
@@ -1114,7 +1211,7 @@ export function PaymentsSection() {
                     >
                       {updatePaymentMutation.isPending || createPaymentMutation.isPending 
                         ? (editingPayment ? 'Updating...' : 'Creating...') 
-                        : editingPayment ? 'Update Payment' : 'Create Payment'}
+                        : editingPayment ? 'Add Payment' : 'Create Payment'}
                     </Button>
                   </div>
                 </form>
