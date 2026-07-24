@@ -59,7 +59,7 @@ export function DeliveriesSection() {
       setLoadingProducts(true);
       try {
         const [{ data: customersData }, { data: productsData }, { data: driversData }, { data: recentItemPrices }] = await Promise.all([
-          supabase.from('customers').select('*').order('customer_name'),
+          supabase.from('customers').select('*'),
           supabase.from('products').select('*').order('name'),
           supabase.from('drivers').select('*').order('name'),
           supabase.from('delivery_items').select('product_id, unit_price').gt('unit_price', 0)
@@ -81,9 +81,12 @@ export function DeliveriesSection() {
           };
         });
         
-        setCustomers(customersData || []);
+        
         setProducts(productsWithPrices);
         setDrivers(driversData || []);
+        setCustomers((customersData || []).slice().sort((a: any, b: any) =>
+          (a.customer_name || '').localeCompare(b.customer_name || '', undefined, { sensitivity: 'base' })
+        ));
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
@@ -1215,17 +1218,7 @@ export function DeliveriesSection() {
                   </div>
 
                   <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="block text-sm font-medium">Products</label>
-                      <button
-                        type="button"
-                        onClick={addDeliveryItem}
-                        className="text-sm bg-blue-600 text-white px-3 py-1 rounded"
-                      >
-                        Add Item
-                      </button>
-                    </div>
-                    
+                    <label className="block text-sm font-medium mb-2">Products</label>
                     <div className="space-y-3">
                       {formData.delivery_items.map((item, index) => (
                         <div key={item.id || index} className="grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_90px_120px_120px_32px] gap-2 border p-2 rounded items-end">
@@ -1313,25 +1306,24 @@ export function DeliveriesSection() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded border bg-gray-50 p-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Total Quantity</label>
-                      <input
-                        type="number"
-                        value={formData.qty}
-                        readOnly
-                        className="w-full p-2 border rounded bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Total Amount</label>
-                      <input
-                        type="number"
-                        value={formData.total_amount}
-                        readOnly
-                        className="w-full p-2 border rounded bg-white"
-                      />
-                    </div>
+                  <div className="rounded border bg-gray-50 p-3">
+                    <label className="block text-sm font-medium mb-1">Total Amount</label>
+                    <input
+                      type="number"
+                      value={formData.total_amount}
+                      readOnly
+                      className="w-full p-2 border rounded bg-white"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={addDeliveryItem}
+                      className="text-sm bg-blue-600 text-white px-3 py-1 rounded"
+                    >
+                      Add Item
+                    </button>
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-4">

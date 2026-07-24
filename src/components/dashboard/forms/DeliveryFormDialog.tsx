@@ -80,11 +80,12 @@ export function DeliveryFormDialog({ open, onOpenChange, editData }: DeliveryFor
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select("*")
-        .order("customer_name");
+        .select("*");
       
       if (error) throw error;
-      return data;
+      return (data || []).slice().sort((a: any, b: any) =>
+        (a.customer_name || '').localeCompare(b.customer_name || '', undefined, { sensitivity: 'base' })
+      );
     },
   });
 
