@@ -327,14 +327,14 @@ export function PaymentsSection() {
       
       // Calculate new total and determine status
       const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
-      let finalStatus = 'partial';
+      let finalStatusCalculated = 'partial';
       
       if (newTotalPaid >= deliveryTotal) {
-        finalStatus = 'paid';
+        finalStatusCalculated = 'paid';
       } else if (newTotalPaid === 0) {
-        finalStatus = 'pending';
+        finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatus = 'partial';
+        finalStatusCalculated = 'partial';
       }
       
       // Create the payment record
@@ -347,7 +347,7 @@ export function PaymentsSection() {
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatus
+          status: finalStatusCalculated
         }])
         .select()
         .single();
@@ -372,7 +372,7 @@ export function PaymentsSection() {
       // Update delivery payment status
       await supabase
         .from('deliveries')
-        .update({ payment_status: finalStatus })
+        .update({ payment_status: finalStatusCalculated })
         .eq('id', paymentData.delivery_id);
 
       return payment;
@@ -421,14 +421,14 @@ export function PaymentsSection() {
       
       // Calculate new total and determine status
       const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
-      let finalStatus = 'partial';
+      let finalStatusCalculated = 'partial';
       
       if (newTotalPaid >= deliveryTotal) {
-        finalStatus = 'paid';
+        finalStatusCalculated = 'paid';
       } else if (newTotalPaid === 0) {
-        finalStatus = 'pending';
+        finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatus = 'partial';
+        finalStatusCalculated = 'partial';
       }
       
       // Create the payment record
@@ -441,7 +441,7 @@ export function PaymentsSection() {
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatus
+          status: finalStatusCalculated
         }])
         .select()
         .single();
@@ -466,7 +466,7 @@ export function PaymentsSection() {
       // Update delivery payment status
       await supabase
         .from('deliveries')
-        .update({ payment_status: finalStatus })
+        .update({ payment_status: finalStatusCalculated })
         .eq('id', paymentData.delivery_id);
 
       return payment;
