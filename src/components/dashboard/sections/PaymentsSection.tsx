@@ -337,14 +337,15 @@ export function PaymentsSection() {
   }, [isResizing]);
 
   const getStatusColor = (status: string) => {
-    if (status.includes('credit')) return "bg-blue-500/10 text-blue-500";
-    if (status.includes('pending')) return "bg-yellow-500/10 text-yellow-500";
+    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
+    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
     if (status === 'paid') return "bg-green-500/10 text-green-500";
     if (status === 'overdue') return "bg-red-500/10 text-red-500";
+    if (status === 'partial') return "bg-orange-500/10 text-orange-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation with credit handling
+  // NEW: Create payment mutation with correct status values
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       const delivery = deliveries.find(d => d.id === paymentData.delivery_id);
@@ -366,7 +367,7 @@ export function PaymentsSection() {
       const totalPaid = existingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const remainingBalance = deliveryTotal - totalPaid;
       
-      // NEW: Determine payment status based on amount
+      // NEW: Determine payment status based on amount (using correct values)
       if (finalAmount >= remainingBalance) {
         finalStatus = 'paid';
       } else if (finalAmount === 0 && creditToUse >= remainingBalance) {
@@ -447,7 +448,7 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation with credit handling
+  // NEW: Update payment mutation with correct status values
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       const delivery = deliveries.find(d => d.id === paymentData.delivery_id);
@@ -469,7 +470,7 @@ export function PaymentsSection() {
       const totalPaid = existingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const remainingBalance = deliveryTotal - totalPaid;
       
-      // NEW: Determine payment status based on amount
+      // NEW: Determine payment status based on amount (using correct values)
       if (finalAmount >= remainingBalance) {
         finalStatus = 'paid';
       } else if (finalAmount === 0 && creditToUse >= remainingBalance) {
