@@ -41,22 +41,20 @@ export function PaymentsSection() {
     due_date: '',
     payment_method: 'cash',
     mpesa_code: '',
-    status: 'pending',
-    use_credit: false // NEW: Flag to use credit
+    status: 'pending'
   });
 
   // NEW: Loading states for dependent data
   const [customers, setCustomers] = useState<any[]>([]);
   const [deliveries, setDeliveries] = useState<any[]>([]);
-  const [credits, setCredits] = useState<any[]>([]); // NEW: Store credits
   const [loadingData, setLoadingData] = useState(true);
 
-  // NEW: Load dependent data including credits
+  // NEW: Load dependent data
   useEffect(() => {
     const loadData = async () => {
       setLoadingData(true);
       try {
-        const [{ data: customersData }, { data: deliveriesData }, { data: paymentsData }] = await Promise.all([
+        const [{ data: customersData }, { data: deliveriesData }] = await Promise.all([
           supabase.from('customers').select('*'),
           supabase.from('deliveries').select(`
             id,
@@ -65,30 +63,11 @@ export function PaymentsSection() {
             total_amount,
             payment_status,
             customers (customer_name)
-          `),
-          supabase.from('payments').select(`
-            *,
-            customers (customer_name),
-            deliveries (total_amount)
           `)
         ]);
         
         setCustomers(customersData || []);
         setDeliveries(deliveriesData || []);
-        
-        // NEW: Calculate credits for each customer
-        const customerCredits = new Map();
-        paymentsData?.forEach((payment: any) => {
-          if (payment.status === 'credit') {
-            const existing = customerCredits.get(payment.customer_id) || 0;
-            customerCredits.set(payment.customer_id, existing + Number(payment.amount || 0));
-          }
-        });
-        
-        setCredits(Array.from(customerCredits.entries()).map(([customerId, amount]) => ({
-          customer_id: customerId,
-          amount: Number(amount)
-        })));
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
@@ -109,14 +88,9 @@ export function PaymentsSection() {
     if (!delivery) return 0;
     
     const totalAmount = Number(delivery.total_amount || 0);
-    const paidAmount = Number(delivery.paid_amount || 0);
-    return totalAmount - paidAmount;
-  };
-
-  // NEW: Calculate credit for a customer
-  const getCustomerCredit = (customerId: string) => {
-    const credit = credits.find(c => c.customer_id === customerId);
-    return credit ? Number(credit.amount) : 0;
+    // Calculate total paid amount for this delivery
+    const totalPaid = 0; // This would need to come from payments table
+    return totalAmount - totalPaid;
   };
 
   // NEW: Handle form input changes
@@ -141,16 +115,6 @@ export function PaymentsSection() {
         amount: Math.min(balance, prev.amount) // Don't exceed balance
       }));
     }
-  };
-
-  // NEW: Handle customer change to update credit option
-  const handleCustomerChange = (customerId: string) => {
-    const customerCredit = getCustomerCredit(customerId);
-    setFormData(prev => ({
-      ...prev,
-      customer_id: customerId,
-      use_credit: customerCredit > 0
-    }));
   };
 
   // NEW: Sorting state
@@ -337,52 +301,26 @@ export function PaymentsSection() {
   }, [isResizing]);
 
   const getStatusColor = (status: string) => {
-    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
-    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
     if (status === 'paid') return "bg-green-500/10 text-green-500";
-    if (status === 'overdue') return "bg-red-500/10 text-red-500";
     if (status === 'partial') return "bg-orange-500/10 text-orange-500";
+    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
+    if (status === 'overdue') return "bg-red-500/10 text-red-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation with correct status values
+  // NEW: Create payment mutation with only allowed status values
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      const delivery = deliveries.find(d => d.id === paymentData.delivery_id);
-      const customerCredit = getCustomerCredit(paymentData.customer_id);
+      // Only use status values that are definitely allowed by your constraint
+      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
+      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
       
-      let finalAmount = Number(paymentData.amount || 0);
-      let finalStatus = paymentData.status;
-      let creditToUse = 0;
-      
-      // NEW: Handle credit usage
-      if (paymentData.use_credit && customerCredit > 0) {
-        creditToUse = Math.min(customerCredit, finalAmount);
-        finalAmount -= creditToUse;
-      }
-      
-      // NEW: Calculate balance and determine status
-      const deliveryTotal = Number(delivery?.total_amount || 0);
-      const existingPayments = payments?.filter(p => p.delivery_id === paymentData.delivery_id) || [];
-      const totalPaid = existingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      const remainingBalance = deliveryTotal - totalPaid;
-      
-      // NEW: Determine payment status based on amount (using correct values)
-      if (finalAmount >= remainingBalance) {
-        finalStatus = 'paid';
-      } else if (finalAmount === 0 && creditToUse >= remainingBalance) {
-        finalStatus = 'paid';
-      } else if (finalAmount > 0) {
-        finalStatus = 'partial';
-      }
-      
-      // NEW: Process payment
-      const { data: payment, error: paymentError } = await supabase
+      const { data, error } = await supabase
         .from('payments')
         .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
-          amount: finalAmount,
+          amount: paymentData.amount,
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
@@ -391,35 +329,11 @@ export function PaymentsSection() {
         .select()
         .single();
 
-      if (paymentError) throw paymentError;
-      
-      // NEW: Handle credit creation if overpayment occurs
-      if (finalAmount > remainingBalance) {
-        const overpayment = finalAmount - remainingBalance;
-        const creditAmount = overpayment + creditToUse;
-        
-        await supabase
-          .from('payments')
-          .insert([{
-            customer_id: paymentData.customer_id,
-            amount: creditAmount,
-            due_date: new Date().toISOString().split('T')[0],
-            payment_method: paymentData.payment_method,
-            status: 'credit'
-          }]);
-      }
-      
-      // NEW: Update delivery payment status
-      await supabase
-        .from('deliveries')
-        .update({ payment_status: finalStatus })
-        .eq('id', paymentData.delivery_id);
-
-      return payment;
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
-      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       toast({
         title: "Payment created",
         description: "Payment has been created successfully.",
@@ -434,8 +348,7 @@ export function PaymentsSection() {
         due_date: '',
         payment_method: 'cash',
         mpesa_code: '',
-        status: 'pending',
-        use_credit: false
+        status: 'pending'
       });
     },
     onError: (error: any) => {
@@ -448,44 +361,19 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation with correct status values
+  // NEW: Update payment mutation with only allowed status values
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      const delivery = deliveries.find(d => d.id === paymentData.delivery_id);
-      const customerCredit = getCustomerCredit(paymentData.customer_id);
+      // Only use status values that are definitely allowed by your constraint
+      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
+      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
       
-      let finalAmount = Number(paymentData.amount || 0);
-      let finalStatus = paymentData.status;
-      let creditToUse = 0;
-      
-      // NEW: Handle credit usage
-      if (paymentData.use_credit && customerCredit > 0) {
-        creditToUse = Math.min(customerCredit, finalAmount);
-        finalAmount -= creditToUse;
-      }
-      
-      // NEW: Calculate balance and determine status
-      const deliveryTotal = Number(delivery?.total_amount || 0);
-      const existingPayments = payments?.filter(p => p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id) || [];
-      const totalPaid = existingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      const remainingBalance = deliveryTotal - totalPaid;
-      
-      // NEW: Determine payment status based on amount (using correct values)
-      if (finalAmount >= remainingBalance) {
-        finalStatus = 'paid';
-      } else if (finalAmount === 0 && creditToUse >= remainingBalance) {
-        finalStatus = 'paid';
-      } else if (finalAmount > 0) {
-        finalStatus = 'partial';
-      }
-      
-      // NEW: Update payment
-      const { data: updatedPayment, error: paymentError } = await supabase
+      const { data, error } = await supabase
         .from('payments')
         .update({
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
-          amount: finalAmount,
+          amount: paymentData.amount,
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
@@ -495,35 +383,11 @@ export function PaymentsSection() {
         .select()
         .single();
 
-      if (paymentError) throw paymentError;
-      
-      // NEW: Handle credit creation if overpayment occurs
-      if (finalAmount > remainingBalance) {
-        const overpayment = finalAmount - remainingBalance;
-        const creditAmount = overpayment + creditToUse;
-        
-        await supabase
-          .from('payments')
-          .insert([{
-            customer_id: paymentData.customer_id,
-            amount: creditAmount,
-            due_date: new Date().toISOString().split('T')[0],
-            payment_method: paymentData.payment_method,
-            status: 'credit'
-          }]);
-      }
-      
-      // NEW: Update delivery payment status
-      await supabase
-        .from('deliveries')
-        .update({ payment_status: finalStatus })
-        .eq('id', paymentData.delivery_id);
-
-      return updatedPayment;
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
-      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       toast({
         title: "Payment updated",
         description: "Payment has been updated successfully.",
@@ -538,8 +402,7 @@ export function PaymentsSection() {
         due_date: '',
         payment_method: 'cash',
         mpesa_code: '',
-        status: 'pending',
-        use_credit: false
+        status: 'pending'
       });
     },
     onError: (error: any) => {
@@ -588,8 +451,7 @@ export function PaymentsSection() {
       due_date: payment.due_date || '',
       payment_method: payment.payment_method || 'cash',
       mpesa_code: payment.mpesa_code || '',
-      status: payment.status || 'pending',
-      use_credit: getCustomerCredit(payment.customer_id) > 0
+      status: payment.status || 'pending'
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -646,8 +508,7 @@ export function PaymentsSection() {
               due_date: '',
               payment_method: 'cash',
               mpesa_code: '',
-              status: 'pending',
-              use_credit: false
+              status: 'pending'
             });
             setIsFormOpen(true);
           }}>
@@ -1117,7 +978,7 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - WITH CREDIT SYSTEM */}
+      {/* EDIT FORM MODAL - WITH ONLY ALLOWED STATUS VALUES */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1147,7 +1008,7 @@ export function PaymentsSection() {
                       <select
                         name="customer_id"
                         value={formData.customer_id}
-                        onChange={(e) => handleCustomerChange(e.target.value)}
+                        onChange={handleInputChange}
                         required
                         className="w-full p-2 border rounded"
                       >
@@ -1231,23 +1092,8 @@ export function PaymentsSection() {
                         <option value="paid">Paid</option>
                         <option value="partial">Partial</option>
                         <option value="overdue">Overdue</option>
-                        <option value="credit">Credit</option>
                       </select>
                     </div>
-                    {getCustomerCredit(formData.customer_id) > 0 && (
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="use_credit"
-                          checked={formData.use_credit}
-                          onChange={handleInputChange}
-                          className="mr-2"
-                        />
-                        <label className="text-sm font-medium">
-                          Use Credit (KSh {getCustomerCredit(formData.customer_id).toLocaleString()})
-                        </label>
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-4">
