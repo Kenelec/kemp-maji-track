@@ -310,15 +310,15 @@ export function PaymentsSection() {
     if (status === 'partial') return "bg-orange-500/10 text-orange-500";
     if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
     if (status === 'overdue') return "bg-red-500/10 text-red-500";
+    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation with only allowed status values
+  // NEW: Create payment mutation with raw status (no validation)
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Only use status values that are definitely allowed by your constraint
-      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
-      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
+      // Use the raw status without validation - let the database handle it
+      const finalStatus = paymentData.status || 'pending';
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
@@ -407,12 +407,11 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation with only allowed status values
+  // NEW: Update payment mutation with raw status (no validation)
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Only use status values that are definitely allowed by your constraint
-      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
-      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
+      // Use the raw status without validation - let the database handle it
+      const finalStatus = paymentData.status || 'pending';
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
@@ -1210,6 +1209,7 @@ export function PaymentsSection() {
                         <option value="paid">Paid</option>
                         <option value="partial">Partial</option>
                         <option value="overdue">Overdue</option>
+                        <option value="credit">Credit</option>
                       </select>
                     </div>
                   </div>
