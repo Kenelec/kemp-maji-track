@@ -306,17 +306,20 @@ export function PaymentsSection() {
   }, [isResizing]);
 
   const getStatusColor = (status: string) => {
-    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
-    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
     if (status === 'paid') return "bg-green-500/10 text-green-500";
-    if (status === 'overdue') return "bg-red-500/10 text-red-500";
     if (status === 'partial') return "bg-orange-500/10 text-orange-500";
+    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
+    if (status === 'overdue') return "bg-red-500/10 text-red-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation with credit handling
+  // NEW: Create payment mutation with only allowed status values
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
+      // Only use status values that are definitely allowed by your constraint
+      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
+      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
+      
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
@@ -404,9 +407,13 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation with credit handling
+  // NEW: Update payment mutation with only allowed status values
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
+      // Only use status values that are definitely allowed by your constraint
+      const allowedStatuses = ['paid', 'partial', 'pending', 'overdue'];
+      const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
+      
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
@@ -525,16 +532,16 @@ export function PaymentsSection() {
     const totalPaid = calculateTotalPaid(deliveryId);
     const balance = calculateBalance(deliveryId);
     
-    // Populate form data with delivery details and calculated amounts
+    // Populate form data with payment details and calculated amounts
     setFormData({
       customer_id: payment.customer_id || '',
-      delivery_id: payment.delivery_id || '',
+      delivery_id: payment.delivery_id || '', // Keep delivery_id for reference
       amount: totalPaid, // Show total paid so far
       due_date: payment.due_date || '',
       payment_method: payment.payment_method || 'cash',
       mpesa_code: payment.mpesa_code || '',
       status: payment.status || 'pending',
-      new_payment_amount: Math.min(balance, 1000) // Default to balance or 1000
+      new_payment_amount: 0 // Start with 0 for new payment
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -1094,6 +1101,7 @@ export function PaymentsSection() {
                         onChange={handleInputChange}
                         required
                         className="w-full p-2 border rounded"
+                        disabled={!!editingPayment} // Disable customer selection when editing
                       >
                         <option value="">Select Customer</option>
                         {customers.map(customer => (
@@ -1103,26 +1111,39 @@ export function PaymentsSection() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Delivery</label>
-                      <select
-                        name="delivery_id"
-                        value={formData.delivery_id}
-                        onChange={(e) => handleDeliveryChange(e.target.value)}
-                        className="w-full p-2 border rounded"
-                      >
-                        <option value="">Select Delivery</option>
-                        {deliveries.filter(d => d.customer_id === formData.customer_id).map(delivery => {
-                          const totalPaid = calculateTotalPaid(delivery.id);
-                          const balance = delivery.total_amount - totalPaid;
-                          return (
-                            <option key={delivery.id} value={delivery.id}>
-                              {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
+                    {!editingPayment && (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Delivery</label>
+                        <select
+                          name="delivery_id"
+                          value={formData.delivery_id}
+                          onChange={(e) => handleDeliveryChange(e.target.value)}
+                          className="w-full p-2 border rounded"
+                        >
+                          <option value="">Select Delivery</option>
+                          {deliveries.filter(d => d.customer_id === formData.customer_id).map(delivery => {
+                            const totalPaid = calculateTotalPaid(delivery.id);
+                            const balance = delivery.total_amount - totalPaid;
+                            return (
+                              <option key={delivery.id} value={delivery.id}>
+                                {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+                    {editingPayment && (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Delivery</label>
+                        <input
+                          type="text"
+                          value={deliveries.find(d => d.id === formData.delivery_id)?.delivery_note_no || "Unknown"}
+                          readOnly
+                          className="w-full p-2 border rounded bg-gray-100"
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium mb-1">Total Amount Paid So Far</label>
                       <input
@@ -1142,6 +1163,7 @@ export function PaymentsSection() {
                         min="0"
                         required
                         className="w-full p-2 border rounded"
+                        placeholder="Enter amount to pay" // NEW: Placeholder instead of 0
                       />
                     </div>
                     <div>
@@ -1188,7 +1210,6 @@ export function PaymentsSection() {
                         <option value="paid">Paid</option>
                         <option value="partial">Partial</option>
                         <option value="overdue">Overdue</option>
-                        <option value="credit">Credit</option>
                       </select>
                     </div>
                   </div>
