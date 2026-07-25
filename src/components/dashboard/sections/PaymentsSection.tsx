@@ -346,14 +346,13 @@ export function PaymentsSection() {
   }, [isResizing]);
 
   const getStatusColor = (status: string) => {
-    if (status === 'paid') return "bg-green-500/10 text-green-500";
-    if (status === 'overdue') return "bg-red-500/10 text-red-500";
-    if (status === 'pending') return "bg-yellow-500/10 text-yellow-500";
-    if (status === 'pending_verification') return "bg-orange-500/10 text-orange-500";
-    if (status === 'rejected') return "bg-red-500/10 text-red-500";
-    if (status === 'failed') return "bg-red-500/10 text-red-500";
-    if (status === 'completed') return "bg-green-500/10 text-green-500";
-    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
+    if (status === 'paid' || status === 'completed') return "bg-green-100 text-green-800 border border-green-300";
+    if (status === 'partial') return "bg-amber-100 text-amber-800 border border-amber-300";
+    if (status === 'overdue') return "bg-red-100 text-red-800 border border-red-300";
+    if (status === 'pending') return "bg-blue-100 text-blue-800 border border-blue-300";
+    if (status === 'pending_verification') return "bg-orange-100 text-orange-800 border border-orange-300";
+    if (status === 'rejected' || status === 'failed') return "bg-red-100 text-red-800 border border-red-300";
+    if (status === 'credit') return "bg-violet-100 text-violet-800 border border-violet-300";
     return "bg-gray-500/10 text-gray-500";
   };
 

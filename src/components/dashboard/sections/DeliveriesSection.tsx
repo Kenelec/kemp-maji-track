@@ -490,7 +490,7 @@ export function DeliveriesSection() {
       return { label: "Paid", color: "bg-green-100 text-green-800", icon: CheckCircle };
     }
     if (delivery.payment_status === 'partial') {
-      return { label: "Partial Payment", color: "bg-blue-100 text-blue-800", icon: CreditCard };
+      return { label: "Partial Payment", color: "bg-amber-100 text-amber-800", icon: CreditCard };
     }
     
     if (delivery.discrepancy_flag || hasQuery) {
