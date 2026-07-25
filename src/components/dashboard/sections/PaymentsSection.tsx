@@ -42,18 +42,17 @@ export function PaymentsSection() {
     new_payment_amount: 0, // NEW: Amount to add
     credit_available: 0, // NEW: Available credit
     use_credit: false, // NEW: Whether to use credit
-    due_date: '',
     payment_method: 'cash',
-    mpesa_code: '',
-    status: 'pending'
+    mpesa_code: ''
   });
 
   // NEW: Loading states for dependent data
   const [customers, setCustomers] = useState<any[]>([]);
   const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [customerCredits, setCustomerCredits] = useState<Record<string, number>>({}); // NEW: Store customer credits
   const [loadingData, setLoadingData] = useState(true);
 
-  // NEW: Load dependent data
+  // NEW: Load dependent data including credits
   useEffect(() => {
     const loadData = async () => {
       setLoadingData(true);
@@ -91,10 +90,7 @@ export function PaymentsSection() {
             credits[payment.customer_id] = existing + Number(payment.amount || 0);
           }
         });
-        
-        // Store credits in a way we can access later
-        const creditMap = new Map(Object.entries(credits));
-        (window as any).__customerCredits = creditMap;
+        setCustomerCredits(credits);
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
@@ -137,8 +133,7 @@ export function PaymentsSection() {
 
   // NEW: Get customer credit
   const getCustomerCredit = (customerId: string) => {
-    const credits = (window as any).__customerCredits as Map<string, number>;
-    return credits?.get(customerId) || 0;
+    return customerCredits[customerId] || 0;
   };
 
   // NEW: Handle form input changes
@@ -155,13 +150,12 @@ export function PaymentsSection() {
   // NEW: Handle delivery change to update existing paid amount
   const handleDeliveryChange = (deliveryId: string) => {
     const totalPaid = calculateTotalPaid(deliveryId);
-    const credit = getCustomerCredit(formData.customer_id);
     
     setFormData(prev => ({
       ...prev,
       delivery_id: deliveryId,
       existing_paid_amount: totalPaid,
-      credit_available: credit
+      credit_available: getCustomerCredit(prev.customer_id)
     }));
   };
 
@@ -416,7 +410,6 @@ export function PaymentsSection() {
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
           amount: paymentData.new_payment_amount, // This is the NEW amount to add
-          due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -444,7 +437,6 @@ export function PaymentsSection() {
           .insert([{
             customer_id: paymentData.customer_id,
             amount: finalCreditAmount,
-            due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
             status: 'credit'
           }]);
@@ -475,10 +467,8 @@ export function PaymentsSection() {
         new_payment_amount: 0,
         credit_available: 0,
         use_credit: false,
-        due_date: '',
         payment_method: 'cash',
-        mpesa_code: '',
-        status: 'pending'
+        mpesa_code: ''
       });
     },
     onError: (error: any) => {
@@ -534,7 +524,6 @@ export function PaymentsSection() {
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
           amount: paymentData.new_payment_amount, // This is the NEW amount to add
-          due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -562,7 +551,6 @@ export function PaymentsSection() {
           .insert([{
             customer_id: paymentData.customer_id,
             amount: finalCreditAmount,
-            due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
             status: 'credit'
           }]);
@@ -593,10 +581,8 @@ export function PaymentsSection() {
         new_payment_amount: 0,
         credit_available: 0,
         use_credit: false,
-        due_date: '',
         payment_method: 'cash',
-        mpesa_code: '',
-        status: 'pending'
+        mpesa_code: ''
       });
     },
     onError: (error: any) => {
@@ -649,10 +635,8 @@ export function PaymentsSection() {
       new_payment_amount: 0, // Start with 0 for new payment
       credit_available: customerCredit, // Show available credit
       use_credit: customerCredit > 0, // Auto-enable if credit available
-      due_date: payment.due_date || '',
       payment_method: payment.payment_method || 'cash',
-      mpesa_code: payment.mpesa_code || '',
-      status: payment.status || 'pending'
+      mpesa_code: payment.mpesa_code || ''
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -711,10 +695,8 @@ export function PaymentsSection() {
               new_payment_amount: 0,
               credit_available: 0,
               use_credit: false,
-              due_date: '',
               payment_method: 'cash',
-              mpesa_code: '',
-              status: 'pending'
+              mpesa_code: ''
             });
             setIsFormOpen(true);
           }}>
@@ -1370,33 +1352,6 @@ export function PaymentsSection() {
                         onChange={handleInputChange}
                         className="w-full p-2 border rounded"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Due Date</label>
-                      <input
-                        type="date"
-                        name="due_date"
-                        value={formData.due_date}
-                        onChange={handleInputChange}
-                        className="w-full p-2 border rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Final Status</label>
-                      <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
-                        className="w-full p-2 border rounded"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="paid">Paid</option>
-                        <option value="overdue">Overdue</option>
-                        <option value="pending_verification">Pending Verification</option>
-                        <option value="rejected">Rejected</option>
-                        <option value="failed">Failed</option>
-                        <option value="completed">Completed</option>
-                      </select>
                     </div>
                   </div>
 
