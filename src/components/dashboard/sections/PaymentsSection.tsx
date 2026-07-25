@@ -374,10 +374,10 @@ export function PaymentsSection() {
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation - only for NEW payments (adds to existing)
+  // NEW: Create payment mutation - adds to existing payments for the same delivery
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Use only status values that are allowed by the constraint (from your Supabase results)
+      // Use only status values that are allowed by the constraint
       const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
@@ -407,13 +407,13 @@ export function PaymentsSection() {
         finalStatusCalculated = 'pending';
       }
       
-      // Create the payment record - use only allowed statuses
+      // Create the payment record - this ADDS to existing payments, doesn't overwrite
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
-          amount: paymentData.additional_payment_amount,
+          amount: paymentData.additional_payment_amount, // This is the NEW amount to add
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
@@ -491,7 +491,7 @@ export function PaymentsSection() {
   // NEW: Update payment mutation - adds to existing payment (NOT REPLACES)
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Use only status values that are allowed by the constraint (from your Supabase results)
+      // Use only status values that are allowed by the constraint
       const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
       
       // Get current total paid for this delivery (excluding this payment if updating)
@@ -526,11 +526,11 @@ export function PaymentsSection() {
         finalStatusCalculated = 'pending';
       }
       
-      // Update the existing payment record with new amount
+      // Update the existing payment record with new amount (this ADDS to the payment, doesn't replace)
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .update({
-          amount: paymentData.additional_payment_amount,
+          amount: paymentData.additional_payment_amount, // This is the NEW amount to add
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
@@ -671,10 +671,10 @@ export function PaymentsSection() {
     e.preventDefault();
     
     if (editingPayment && formData.id) {
-      // Update existing payment (adds to existing total)
+      // Update existing payment (this ADDS to existing total, doesn't replace)
       updatePaymentMutation.mutate(formData);
     } else {
-      // Create new payment
+      // Create new payment (this ADDS to existing payments for the same delivery)
       createPaymentMutation.mutate(formData);
     }
   };
