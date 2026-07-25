@@ -31,6 +31,7 @@ export function PaymentsSection() {
   const [editingPayment, setEditingPayment] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
+  const [showPaymentHistory, setShowPaymentHistory] = useState<{deliveryId: string, payments: any[]} | null>(null); // NEW: State for payment history
   
   // NEW: Form state for editing
   const [formData, setFormData] = useState({
@@ -68,10 +69,14 @@ export function PaymentsSection() {
             customers (customer_name)
           `),
           supabase.from('payments').select(`
+            id,
             customer_id,
             amount,
             status,
-            delivery_id
+            delivery_id,
+            created_at,
+            payment_method,
+            mpesa_code
           `)
         ]);
         
@@ -110,12 +115,11 @@ export function PaymentsSection() {
     return deliveryPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
   };
 
-  // NEW: Calculate number of payments made for a delivery
-  const calculatePaymentCount = (deliveryId: string) => {
-    if (!payments) return 0;
+  // NEW: Get all payments for a delivery (for history)
+  const getDeliveryPayments = (deliveryId: string) => {
+    if (!payments) return [];
     
-    const deliveryPayments = payments.filter((p: any) => p.delivery_id === deliveryId && p.status !== 'credit');
-    return deliveryPayments.length;
+    return payments.filter((p: any) => p.delivery_id === deliveryId && p.status !== 'credit');
   };
 
   // NEW: Calculate balance for a delivery
@@ -166,6 +170,12 @@ export function PaymentsSection() {
     }));
   };
 
+  // NEW: Handle payment history click
+  const handlePaymentHistoryClick = (deliveryId: string) => {
+    const deliveryPayments = getDeliveryPayments(deliveryId);
+    setShowPaymentHistory({ deliveryId, payments: deliveryPayments });
+  };
+
   // NEW: Sorting state
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -184,7 +194,7 @@ export function PaymentsSection() {
     total: 100,
     amount: 100,
     balance: 100,
-    due: 100,
+    payments: 80, // NEW: Width for payment count
     method: 100,
     code: 100,
     status: 100,
@@ -949,13 +959,13 @@ export function PaymentsSection() {
                         {/* Payment Count Column - NEW */}
                         <TableHead 
                           className="text-xs py-1 px-2 text-center"
-                          style={{ width: `${columnWidths.method}px` }}
+                          style={{ width: `${columnWidths.payments}px` }}
                         >
                           <div className="flex items-center justify-between w-full h-full">
                             <span className="flex-1 text-left">Payments</span>
                             <div
                               className="resize-handle w-2 h-full bg-transparent hover:bg-blue-200 cursor-col-resize flex items-center justify-center"
-                              onMouseDown={(e) => handleResizeStart('method', e)}
+                              onMouseDown={(e) => handleResizeStart('payments', e)}
                               style={{ cursor: 'col-resize' }}
                             >
                               <div className="w-px h-full bg-gray-300 hover:bg-blue-500"></div>
@@ -1051,7 +1061,7 @@ export function PaymentsSection() {
                         const deliveryTotal = payment.deliveries?.total_amount || 0;
                         const totalPaid = calculateTotalPaid(payment.delivery_id);
                         const balance = deliveryTotal - totalPaid;
-                        const paymentCount = calculatePaymentCount(payment.delivery_id);
+                        const deliveryPayments = getDeliveryPayments(payment.delivery_id);
                         const statusColor = getStatusColor(payment.status);
                         
                         return (
@@ -1144,14 +1154,19 @@ export function PaymentsSection() {
                                 </span>
                               )}
                             </TableCell>
-                            {/* Payment Count Column - NEW */}
+                            {/* Payment Count Column - NEW with clickable badge */}
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
-                              style={{ width: `${columnWidths.method}px` }}
+                              style={{ width: `${columnWidths.payments}px` }}
                             >
-                              <Badge variant="outline" className="text-[10px]">
-                                {paymentCount} payment{paymentCount !== 1 ? 's' : ''}
-                              </Badge>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePaymentHistoryClick(payment.delivery_id)}
+                                className="text-[10px] h-6 px-2"
+                              >
+                                {deliveryPayments.length} payment{deliveryPayments.length !== 1 ? 's' : ''}
+                              </Button>
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
@@ -1210,6 +1225,49 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
+      {/* PAYMENT HISTORY MODAL - NEW */}
+      {showPaymentHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">
+                  Payment History for Delivery {showPaymentHistory.payments[0]?.deliveries?.delivery_note_no || 'Unknown'}
+                </h3>
+                <button 
+                  onClick={() => setShowPaymentHistory(null)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-2">
+                {showPaymentHistory.payments.map((payment: any) => (
+                  <div key={payment.id} className="border p-3 rounded">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div><strong>Date:</strong> {format(new Date(payment.created_at), "dd/MM/yyyy HH:mm")}</div>
+                      <div><strong>Amount:</strong> KSh {Number(payment.amount).toLocaleString()}</div>
+                      <div><strong>Method:</strong> {payment.payment_method}</div>
+                      <div><strong>Status:</strong> {payment.status}</div>
+                      {payment.mpesa_code && (
+                        <div className="col-span-2"><strong>M-Pesa Code:</strong> {payment.mpesa_code}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                
+                {showPaymentHistory.payments.length === 0 && (
+                  <div className="text-center py-4 text-gray-500">
+                    No payment history found for this delivery.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* EDIT FORM MODAL - WITH CREDIT SYSTEM */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
@@ -1266,7 +1324,7 @@ export function PaymentsSection() {
                           {deliveries.filter(d => d.customer_id === formData.customer_id).map(delivery => {
                             const totalPaid = calculateTotalPaid(delivery.id);
                             const balance = delivery.total_amount - totalPaid;
-                            const paymentCount = calculatePaymentCount(delivery.id);
+                            const paymentCount = getDeliveryPayments(delivery.id).length;
                             return (
                               <option key={delivery.id} value={delivery.id}>
                                 {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()} ({paymentCount} payment{paymentCount !== 1 ? 's' : ''})
