@@ -366,7 +366,6 @@ export function PaymentsSection() {
 
   const getStatusColor = (status: string) => {
     if (status === 'paid' || status === 'completed') return "bg-green-100 text-green-800 border border-green-300";
-    if (status === 'partial') return "bg-amber-100 text-amber-800 border border-amber-300";
     if (status === 'overdue') return "bg-red-100 text-red-800 border border-red-300";
     if (status === 'pending') return "bg-blue-100 text-blue-800 border border-blue-300";
     if (status === 'pending_verification') return "bg-orange-100 text-orange-800 border border-orange-300";
@@ -378,8 +377,9 @@ export function PaymentsSection() {
   // NEW: Create payment mutation - only for NEW payments (adds to existing)
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Use only status values that are allowed by the constraint - NO VALIDATION to avoid constraint error
-      // Let the database handle the constraint directly
+      // Use only status values that are allowed by the constraint (from your Supabase results)
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
+      
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
@@ -403,10 +403,11 @@ export function PaymentsSection() {
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'partial';
+        // Use 'pending' instead of 'partial' since 'partial' is not allowed by constraint
+        finalStatusCalculated = 'pending';
       }
       
-      // Create the payment record - let database handle constraint
+      // Create the payment record - use only allowed statuses
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
@@ -416,7 +417,7 @@ export function PaymentsSection() {
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatusCalculated // Use calculated status without validation
+          status: finalStatusCalculated // Use only allowed status
         }])
         .select()
         .single();
@@ -490,8 +491,8 @@ export function PaymentsSection() {
   // NEW: Update payment mutation - adds to existing payment (NOT REPLACES)
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Use only status values that are allowed by the constraint - NO VALIDATION to avoid constraint error
-      // Let the database handle the constraint directly
+      // Use only status values that are allowed by the constraint (from your Supabase results)
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
       
       // Get current total paid for this delivery (excluding this payment if updating)
       const existingPayments = payments?.filter((p: any) => 
@@ -514,14 +515,15 @@ export function PaymentsSection() {
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
       
-      // Determine status based on new total
+      // Determine status based on new total (using only allowed statuses)
       let finalStatusCalculated = 'pending';
       if (newTotalPaid >= deliveryTotal) {
         finalStatusCalculated = 'paid';
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'partial';
+        // Use 'pending' instead of 'partial' since 'partial' is not allowed by constraint
+        finalStatusCalculated = 'pending';
       }
       
       // Update the existing payment record with new amount
@@ -532,7 +534,7 @@ export function PaymentsSection() {
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatusCalculated // Use calculated status without validation
+          status: finalStatusCalculated // Use only allowed status
         })
         .eq('id', paymentData.id)
         .select()
