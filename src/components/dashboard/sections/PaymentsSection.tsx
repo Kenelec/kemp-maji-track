@@ -43,7 +43,8 @@ export function PaymentsSection() {
     credit_available: 0, // NEW: Available credit
     use_credit: false, // NEW: Whether to use credit
     payment_method: 'cash',
-    mpesa_code: ''
+    mpesa_code: '',
+    due_date: new Date().toISOString().split('T')[0] // NEW: Add due date
   });
 
   // NEW: Loading states for dependent data
@@ -73,6 +74,7 @@ export function PaymentsSection() {
             amount,
             status,
             delivery_id,
+            due_date,
             created_at,
             payment_method,
             mpesa_code
@@ -82,7 +84,7 @@ export function PaymentsSection() {
         setCustomers(customersData || []);
         setDeliveries(deliveriesData || []);
         
-        // NEW: Calculate customer credits
+        // NEW: Calculate customer credits from all payments
         const credits: Record<string, number> = {};
         paymentsData?.forEach((payment: any) => {
           if (payment.status === 'credit') {
@@ -403,13 +405,14 @@ export function PaymentsSection() {
         finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
       }
       
-      // Create the payment record
+      // Create the payment record - INCLUDE due_date
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
           amount: paymentData.new_payment_amount, // This is the NEW amount to add
+          due_date: paymentData.due_date, // Include due_date to satisfy constraint
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -437,6 +440,7 @@ export function PaymentsSection() {
           .insert([{
             customer_id: paymentData.customer_id,
             amount: finalCreditAmount,
+            due_date: paymentData.due_date, // Include due_date to satisfy constraint
             payment_method: paymentData.payment_method,
             status: 'credit'
           }]);
@@ -468,7 +472,8 @@ export function PaymentsSection() {
         credit_available: 0,
         use_credit: false,
         payment_method: 'cash',
-        mpesa_code: ''
+        mpesa_code: '',
+        due_date: new Date().toISOString().split('T')[0] // Reset due date
       });
     },
     onError: (error: any) => {
@@ -524,6 +529,7 @@ export function PaymentsSection() {
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
           amount: paymentData.new_payment_amount, // This is the NEW amount to add
+          due_date: paymentData.due_date, // Include due_date to satisfy constraint
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -551,6 +557,7 @@ export function PaymentsSection() {
           .insert([{
             customer_id: paymentData.customer_id,
             amount: finalCreditAmount,
+            due_date: paymentData.due_date, // Include due_date to satisfy constraint
             payment_method: paymentData.payment_method,
             status: 'credit'
           }]);
@@ -582,7 +589,8 @@ export function PaymentsSection() {
         credit_available: 0,
         use_credit: false,
         payment_method: 'cash',
-        mpesa_code: ''
+        mpesa_code: '',
+        due_date: new Date().toISOString().split('T')[0] // Reset due date
       });
     },
     onError: (error: any) => {
@@ -636,7 +644,8 @@ export function PaymentsSection() {
       credit_available: customerCredit, // Show available credit
       use_credit: customerCredit > 0, // Auto-enable if credit available
       payment_method: payment.payment_method || 'cash',
-      mpesa_code: payment.mpesa_code || ''
+      mpesa_code: payment.mpesa_code || '',
+      due_date: payment.due_date || new Date().toISOString().split('T')[0] // Use existing due date or today
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -696,7 +705,8 @@ export function PaymentsSection() {
               credit_available: 0,
               use_credit: false,
               payment_method: 'cash',
-              mpesa_code: ''
+              mpesa_code: '',
+              due_date: new Date().toISOString().split('T')[0]
             });
             setIsFormOpen(true);
           }}>
@@ -1351,6 +1361,17 @@ export function PaymentsSection() {
                         value={formData.mpesa_code}
                         onChange={handleInputChange}
                         className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Due Date *</label>
+                      <input
+                        type="date"
+                        name="due_date"
+                        value={formData.due_date}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                        required
                       />
                     </div>
                   </div>
