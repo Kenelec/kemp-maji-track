@@ -39,24 +39,25 @@ export function PaymentsSection() {
     delivery_id: '',
     amount: 0,
     due_date: '',
-    delivery_date: '',
     payment_method: 'cash',
     mpesa_code: '',
     status: 'pending',
-    additional_payment_amount: 0 // NEW: Field for additional payment
+    additional_payment_amount: 0, // NEW: Field for additional payment
+    use_credit: false // NEW: Flag to use customer credit
   });
 
   // NEW: Loading states for dependent data
   const [customers, setCustomers] = useState<any[]>([]);
   const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [customerCredits, setCustomerCredits] = useState<Record<string, number>>({}); // NEW: Store customer credits
   const [loadingData, setLoadingData] = useState(true);
 
-  // NEW: Load dependent data
+  // NEW: Load dependent data including credits
   useEffect(() => {
     const loadData = async () => {
       setLoadingData(true);
       try {
-        const [{ data: customersData }, { data: deliveriesData }] = await Promise.all([
+        const [{ data: customersData }, { data: deliveriesData }, { data: paymentsData }] = await Promise.all([
           supabase.from('customers').select('*'),
           supabase.from('deliveries').select(`
             id,
@@ -65,11 +66,26 @@ export function PaymentsSection() {
             total_amount,
             payment_status,
             customers (customer_name)
+          `),
+          supabase.from('payments').select(`
+            customer_id,
+            amount,
+            status
           `)
         ]);
         
         setCustomers(customersData || []);
         setDeliveries(deliveriesData || []);
+        
+        // NEW: Calculate customer credits
+        const credits: Record<string, number> = {};
+        paymentsData?.forEach((payment: any) => {
+          if (payment.status === 'credit') {
+            const existing = credits[payment.customer_id] || 0;
+            credits[payment.customer_id] = existing + Number(payment.amount || 0);
+          }
+        });
+        setCustomerCredits(credits);
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
@@ -103,6 +119,11 @@ export function PaymentsSection() {
     return totalAmount - totalPaid;
   };
 
+  // NEW: Get customer credit
+  const getCustomerCredit = (customerId: string) => {
+    return customerCredits[customerId] || 0;
+  };
+
   // NEW: Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -122,8 +143,17 @@ export function PaymentsSection() {
     setFormData(prev => ({
       ...prev,
       delivery_id: deliveryId,
-      delivery_date: delivery?.delivery_date || '',
       additional_payment_amount: Math.min(balance, prev.additional_payment_amount) // Don't exceed balance
+    }));
+  };
+
+  // NEW: Handle customer change to update credit usage
+  const handleCustomerChange = (customerId: string) => {
+    const customerCredit = getCustomerCredit(customerId);
+    setFormData(prev => ({
+      ...prev,
+      customer_id: customerId,
+      use_credit: customerCredit > 0 // Auto-enable credit if available
     }));
   };
 
@@ -338,11 +368,20 @@ export function PaymentsSection() {
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
       const balance = deliveryTotal - totalPaid;
+      const customerCredit = getCustomerCredit(paymentData.customer_id);
       
-      // Calculate new total and determine status
-      const newTotalPaid = totalPaid + Number(paymentData.additional_payment_amount || 0);
+      // Calculate new total including credit if used
+      let newTotalPaid = totalPaid;
+      let creditToApply = 0;
+      
+      if (paymentData.use_credit && customerCredit > 0) {
+        creditToApply = Math.min(customerCredit, paymentData.additional_payment_amount);
+        newTotalPaid += creditToApply;
+      }
+      
+      newTotalPaid += Number(paymentData.additional_payment_amount || 0) - creditToApply;
+      
       let finalStatusCalculated = 'pending';
-      
       if (newTotalPaid >= deliveryTotal) {
         finalStatusCalculated = 'paid';
       } else if (newTotalPaid === 0) {
@@ -359,7 +398,6 @@ export function PaymentsSection() {
           delivery_id: paymentData.delivery_id,
           amount: paymentData.additional_payment_amount,
           due_date: paymentData.due_date,
-          delivery_date: paymentData.delivery_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -371,15 +409,23 @@ export function PaymentsSection() {
       
       // Check if there's overpayment that should become credit
       if (newTotalPaid > deliveryTotal) {
-        const creditAmount = newTotalPaid - deliveryTotal;
+        const overpayment = newTotalPaid - deliveryTotal;
+        const finalCreditAmount = overpayment + creditToApply;
         
+        // First, delete any existing credit for this customer (to avoid duplicates)
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('customer_id', paymentData.customer_id)
+          .eq('status', 'credit');
+        
+        // Then create new credit
         await supabase
           .from('payments')
           .insert([{
             customer_id: paymentData.customer_id,
-            amount: creditAmount,
+            amount: finalCreditAmount,
             due_date: new Date().toISOString().split('T')[0],
-            delivery_date: paymentData.delivery_date,
             payment_method: paymentData.payment_method,
             status: 'credit' // Use credit status for overpayment
           }]);
@@ -408,11 +454,11 @@ export function PaymentsSection() {
         delivery_id: '',
         amount: 0,
         due_date: '',
-        delivery_date: '',
         payment_method: 'cash',
         mpesa_code: '',
         status: 'pending',
-        additional_payment_amount: 0
+        additional_payment_amount: 0,
+        use_credit: false
       });
     },
     onError: (error: any) => {
@@ -437,9 +483,18 @@ export function PaymentsSection() {
         p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id
       ) || [];
       const existingTotalPaid = existingPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+      const customerCredit = getCustomerCredit(paymentData.customer_id);
       
-      // Calculate new total (existing + additional payment)
-      const newTotalPaid = existingTotalPaid + Number(paymentData.additional_payment_amount || 0);
+      // Calculate new total (existing + additional payment + credit if used)
+      let newTotalPaid = existingTotalPaid;
+      let creditToApply = 0;
+      
+      if (paymentData.use_credit && customerCredit > 0) {
+        creditToApply = Math.min(customerCredit, paymentData.additional_payment_amount);
+        newTotalPaid += creditToApply;
+      }
+      
+      newTotalPaid += Number(paymentData.additional_payment_amount || 0) - creditToApply;
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
@@ -460,7 +515,6 @@ export function PaymentsSection() {
         .update({
           amount: paymentData.additional_payment_amount,
           due_date: paymentData.due_date,
-          delivery_date: paymentData.delivery_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -473,7 +527,8 @@ export function PaymentsSection() {
       
       // Check if there's overpayment that should become credit
       if (newTotalPaid > deliveryTotal) {
-        const creditAmount = newTotalPaid - deliveryTotal;
+        const overpayment = newTotalPaid - deliveryTotal;
+        const finalCreditAmount = overpayment + creditToApply;
         
         // First, delete any existing credit for this customer (to avoid duplicates)
         await supabase
@@ -487,9 +542,8 @@ export function PaymentsSection() {
           .from('payments')
           .insert([{
             customer_id: paymentData.customer_id,
-            amount: creditAmount,
+            amount: finalCreditAmount,
             due_date: new Date().toISOString().split('T')[0],
-            delivery_date: paymentData.delivery_date,
             payment_method: paymentData.payment_method,
             status: 'credit' // Use credit status for overpayment
           }]);
@@ -518,11 +572,11 @@ export function PaymentsSection() {
         delivery_id: '',
         amount: 0,
         due_date: '',
-        delivery_date: '',
         payment_method: 'cash',
         mpesa_code: '',
         status: 'pending',
-        additional_payment_amount: 0
+        additional_payment_amount: 0,
+        use_credit: false
       });
     },
     onError: (error: any) => {
@@ -565,6 +619,7 @@ export function PaymentsSection() {
     const deliveryId = payment.delivery_id;
     const totalPaid = calculateTotalPaid(deliveryId);
     const balance = calculateBalance(deliveryId);
+    const customerCredit = getCustomerCredit(payment.customer_id);
     
     // Populate form data with payment details and calculated amounts
     setFormData({
@@ -573,11 +628,11 @@ export function PaymentsSection() {
       delivery_id: payment.delivery_id || '', // Keep delivery_id for reference
       amount: totalPaid, // Show total paid so far
       due_date: payment.due_date || '',
-      delivery_date: payment.delivery_date || payment.deliveries?.delivery_date || '',
       payment_method: payment.payment_method || 'cash',
       mpesa_code: payment.mpesa_code || '',
       status: payment.status || 'pending',
-      additional_payment_amount: 0 // Start with 0 for additional payment
+      additional_payment_amount: 0, // Start with 0 for additional payment
+      use_credit: customerCredit > 0 // Enable credit usage if available
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -634,11 +689,11 @@ export function PaymentsSection() {
               delivery_id: '',
               amount: 0,
               due_date: '',
-              delivery_date: '',
               payment_method: 'cash',
               mpesa_code: '',
               status: 'pending',
-              additional_payment_amount: 0
+              additional_payment_amount: 0,
+              use_credit: false
             });
             setIsFormOpen(true);
           }}>
@@ -982,8 +1037,7 @@ export function PaymentsSection() {
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.delivery_date}px` }}
                             >
-                              {payment.delivery_date ? format(new Date(payment.delivery_date), "dd/MM/yyyy") : 
-                               payment.deliveries?.delivery_date ? format(new Date(payment.deliveries.delivery_date), "dd/MM/yyyy") : "—"}
+                              {payment.deliveries?.delivery_date ? format(new Date(payment.deliveries.delivery_date), "dd/MM/yyyy") : "—"}
                             </TableCell>
                             
                             <TableCell 
@@ -1123,7 +1177,7 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - WITH CORRECT LOGIC */}
+      {/* EDIT FORM MODAL - WITH CREDIT SYSTEM */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1153,7 +1207,7 @@ export function PaymentsSection() {
                       <select
                         name="customer_id"
                         value={formData.customer_id}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleCustomerChange(e.target.value)}
                         required
                         className="w-full p-2 border rounded"
                         disabled={!!editingPayment} // Disable customer selection when editing
@@ -1222,16 +1276,6 @@ export function PaymentsSection() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Delivery Date</label>
-                      <input
-                        type="date"
-                        name="delivery_date"
-                        value={formData.delivery_date}
-                        onChange={handleInputChange}
-                        className="w-full p-2 border rounded"
-                      />
-                    </div>
-                    <div>
                       <label className="block text-sm font-medium mb-1">Payment Mode</label>
                       <select
                         name="payment_method"
@@ -1253,6 +1297,32 @@ export function PaymentsSection() {
                         className="w-full p-2 border rounded"
                       />
                     </div>
+                    
+                    {/* CREDIT USAGE SECTION */}
+                    {getCustomerCredit(formData.customer_id) > 0 && (
+                      <div className="md:col-span-2">
+                        <div className="border rounded p-3 bg-blue-50">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-medium text-sm">Available Credit</h4>
+                              <p className="text-sm text-gray-600">
+                                Customer has KSh {getCustomerCredit(formData.customer_id).toLocaleString()} credit available
+                              </p>
+                            </div>
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                name="use_credit"
+                                checked={formData.use_credit}
+                                onChange={handleInputChange}
+                                className="mr-2"
+                              />
+                              <span className="text-sm font-medium">Use Credit</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-4">
