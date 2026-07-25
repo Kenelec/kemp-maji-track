@@ -38,22 +38,22 @@ export function PaymentsSection() {
     id: '',
     customer_id: '',
     delivery_id: '',
-    amount: 0,
+    existing_paid_amount: 0, // NEW: Current total paid for this delivery
+    new_payment_amount: 0, // NEW: Amount to add
+    credit_available: 0, // NEW: Available credit
+    use_credit: false, // NEW: Whether to use credit
     due_date: '',
     payment_method: 'cash',
     mpesa_code: '',
-    status: 'pending', // Use only 'pending' as default - the safest value
-    additional_payment_amount: 0, // NEW: Field for additional payment
-    use_credit: false // NEW: Flag to use customer credit
+    status: 'pending'
   });
 
   // NEW: Loading states for dependent data
   const [customers, setCustomers] = useState<any[]>([]);
   const [deliveries, setDeliveries] = useState<any[]>([]);
-  const [customerCredits, setCustomerCredits] = useState<Record<string, number>>({}); // NEW: Store customer credits
   const [loadingData, setLoadingData] = useState(true);
 
-  // NEW: Load dependent data including credits
+  // NEW: Load dependent data
   useEffect(() => {
     const loadData = async () => {
       setLoadingData(true);
@@ -91,7 +91,10 @@ export function PaymentsSection() {
             credits[payment.customer_id] = existing + Number(payment.amount || 0);
           }
         });
-        setCustomerCredits(credits);
+        
+        // Store credits in a way we can access later
+        const creditMap = new Map(Object.entries(credits));
+        (window as any).__customerCredits = creditMap;
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
@@ -107,7 +110,7 @@ export function PaymentsSection() {
     loadData();
   }, [toast]);
 
-  // NEW: Calculate total paid for a delivery (including all payments for that delivery)
+  // NEW: Calculate total paid for a delivery
   const calculateTotalPaid = (deliveryId: string) => {
     if (!payments) return 0;
     
@@ -134,7 +137,8 @@ export function PaymentsSection() {
 
   // NEW: Get customer credit
   const getCustomerCredit = (customerId: string) => {
-    return customerCredits[customerId] || 0;
+    const credits = (window as any).__customerCredits as Map<string, number>;
+    return credits?.get(customerId) || 0;
   };
 
   // NEW: Handle form input changes
@@ -144,29 +148,30 @@ export function PaymentsSection() {
     
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'amount' || name === 'additional_payment_amount' ? Number(val) : val
+      [name]: name === 'existing_paid_amount' || name === 'new_payment_amount' || name === 'credit_available' ? Number(val) : val
     }));
   };
 
-  // NEW: Handle delivery change to update balance
+  // NEW: Handle delivery change to update existing paid amount
   const handleDeliveryChange = (deliveryId: string) => {
-    const balance = calculateBalance(deliveryId);
-    const delivery = deliveries.find((d: any) => d.id === deliveryId);
+    const totalPaid = calculateTotalPaid(deliveryId);
+    const credit = getCustomerCredit(formData.customer_id);
     
     setFormData(prev => ({
       ...prev,
       delivery_id: deliveryId,
-      additional_payment_amount: Math.min(balance, prev.additional_payment_amount) // Don't exceed balance
+      existing_paid_amount: totalPaid,
+      credit_available: credit
     }));
   };
 
-  // NEW: Handle customer change to update credit usage
+  // NEW: Handle customer change to update credit
   const handleCustomerChange = (customerId: string) => {
-    const customerCredit = getCustomerCredit(customerId);
+    const credit = getCustomerCredit(customerId);
     setFormData(prev => ({
       ...prev,
       customer_id: customerId,
-      use_credit: customerCredit > 0 // Auto-enable credit if available
+      credit_available: credit
     }));
   };
 
@@ -383,19 +388,17 @@ export function PaymentsSection() {
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
-      const balance = deliveryTotal - totalPaid;
-      const customerCredit = getCustomerCredit(paymentData.customer_id);
       
-      // Calculate new total including credit if used
+      // Calculate new total (existing + new + credit if used)
       let newTotalPaid = totalPaid;
       let creditToApply = 0;
       
-      if (paymentData.use_credit && customerCredit > 0) {
-        creditToApply = Math.min(customerCredit, paymentData.additional_payment_amount);
+      if (paymentData.use_credit && paymentData.credit_available > 0) {
+        creditToApply = Math.min(paymentData.credit_available, paymentData.new_payment_amount);
         newTotalPaid += creditToApply;
       }
       
-      newTotalPaid += Number(paymentData.additional_payment_amount || 0) - creditToApply;
+      newTotalPaid += Number(paymentData.new_payment_amount || 0) - creditToApply;
       
       let finalStatusCalculated = 'pending';
       if (newTotalPaid >= deliveryTotal) {
@@ -403,21 +406,20 @@ export function PaymentsSection() {
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        // Use 'pending' instead of 'partial' since 'partial' is not allowed by constraint
-        finalStatusCalculated = 'pending';
+        finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
       }
       
-      // Create the payment record - this ADDS to existing payments, doesn't overwrite
+      // Create the payment record
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
-          amount: paymentData.additional_payment_amount, // This is the NEW amount to add
+          amount: paymentData.new_payment_amount, // This is the NEW amount to add
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatusCalculated // Use only allowed status
+          status: finalStatusCalculated
         }])
         .select()
         .single();
@@ -444,7 +446,7 @@ export function PaymentsSection() {
             amount: finalCreditAmount,
             due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
-            status: 'credit' // Use credit status for overpayment
+            status: 'credit'
           }]);
       }
       
@@ -469,13 +471,14 @@ export function PaymentsSection() {
         id: '',
         customer_id: '',
         delivery_id: '',
-        amount: 0,
+        existing_paid_amount: 0,
+        new_payment_amount: 0,
+        credit_available: 0,
+        use_credit: false,
         due_date: '',
         payment_method: 'cash',
         mpesa_code: '',
-        status: 'pending',
-        additional_payment_amount: 0,
-        use_credit: false
+        status: 'pending'
       });
     },
     onError: (error: any) => {
@@ -499,44 +502,43 @@ export function PaymentsSection() {
         p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id
       ) || [];
       const existingTotalPaid = existingPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-      const customerCredit = getCustomerCredit(paymentData.customer_id);
       
-      // Calculate new total (existing + additional payment + credit if used)
+      // Calculate new total (existing + new + credit if used)
       let newTotalPaid = existingTotalPaid;
       let creditToApply = 0;
       
-      if (paymentData.use_credit && customerCredit > 0) {
-        creditToApply = Math.min(customerCredit, paymentData.additional_payment_amount);
+      if (paymentData.use_credit && paymentData.credit_available > 0) {
+        creditToApply = Math.min(paymentData.credit_available, paymentData.new_payment_amount);
         newTotalPaid += creditToApply;
       }
       
-      newTotalPaid += Number(paymentData.additional_payment_amount || 0) - creditToApply;
+      newTotalPaid += Number(paymentData.new_payment_amount || 0) - creditToApply;
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
       
-      // Determine status based on new total (using only allowed statuses)
+      // Determine status based on new total
       let finalStatusCalculated = 'pending';
       if (newTotalPaid >= deliveryTotal) {
         finalStatusCalculated = 'paid';
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        // Use 'pending' instead of 'partial' since 'partial' is not allowed by constraint
-        finalStatusCalculated = 'pending';
+        finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
       }
       
-      // Update the existing payment record with new amount (this ADDS to the payment, doesn't replace)
+      // Create the payment record (this ADDS to existing payments, doesn't replace)
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
-        .update({
-          amount: paymentData.additional_payment_amount, // This is the NEW amount to add
+        .insert([{
+          customer_id: paymentData.customer_id,
+          delivery_id: paymentData.delivery_id,
+          amount: paymentData.new_payment_amount, // This is the NEW amount to add
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatusCalculated // Use only allowed status
-        })
-        .eq('id', paymentData.id)
+          status: finalStatusCalculated
+        }])
         .select()
         .single();
 
@@ -562,7 +564,7 @@ export function PaymentsSection() {
             amount: finalCreditAmount,
             due_date: new Date().toISOString().split('T')[0],
             payment_method: paymentData.payment_method,
-            status: 'credit' // Use credit status for overpayment
+            status: 'credit'
           }]);
       }
       
@@ -587,13 +589,14 @@ export function PaymentsSection() {
         id: '',
         customer_id: '',
         delivery_id: '',
-        amount: 0,
+        existing_paid_amount: 0,
+        new_payment_amount: 0,
+        credit_available: 0,
+        use_credit: false,
         due_date: '',
         payment_method: 'cash',
         mpesa_code: '',
-        status: 'pending',
-        additional_payment_amount: 0,
-        use_credit: false
+        status: 'pending'
       });
     },
     onError: (error: any) => {
@@ -635,21 +638,21 @@ export function PaymentsSection() {
   const handleEdit = (payment: any) => {
     const deliveryId = payment.delivery_id;
     const totalPaid = calculateTotalPaid(deliveryId);
-    const balance = calculateBalance(deliveryId);
     const customerCredit = getCustomerCredit(payment.customer_id);
     
-    // Populate form data with payment details and calculated amounts
+    // Populate form data with payment details
     setFormData({
-      id: payment.id, // Include ID for updates
+      id: payment.id,
       customer_id: payment.customer_id || '',
-      delivery_id: payment.delivery_id || '', // Keep delivery_id for reference
-      amount: totalPaid, // Show total paid so far
+      delivery_id: payment.delivery_id || '',
+      existing_paid_amount: totalPaid, // Show total paid so far
+      new_payment_amount: 0, // Start with 0 for new payment
+      credit_available: customerCredit, // Show available credit
+      use_credit: customerCredit > 0, // Auto-enable if credit available
       due_date: payment.due_date || '',
       payment_method: payment.payment_method || 'cash',
       mpesa_code: payment.mpesa_code || '',
-      status: payment.status || 'pending',
-      additional_payment_amount: 0, // Start with 0 for additional payment
-      use_credit: customerCredit > 0 // Enable credit usage if available
+      status: payment.status || 'pending'
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -704,13 +707,14 @@ export function PaymentsSection() {
               id: '',
               customer_id: '',
               delivery_id: '',
-              amount: 0,
+              existing_paid_amount: 0,
+              new_payment_amount: 0,
+              credit_available: 0,
+              use_credit: false,
               due_date: '',
               payment_method: 'cash',
               mpesa_code: '',
-              status: 'pending',
-              additional_payment_amount: 0,
-              use_credit: false
+              status: 'pending'
             });
             setIsFormOpen(true);
           }}>
@@ -1224,49 +1228,6 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* PAYMENT HISTORY MODAL - NEW */}
-      {showPaymentHistory && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
-          <div className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">
-                  Payment History for Delivery {showPaymentHistory.payments[0]?.deliveries?.delivery_note_no || 'Unknown'}
-                </h3>
-                <button 
-                  onClick={() => setShowPaymentHistory(null)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <div className="space-y-2">
-                {showPaymentHistory.payments.map((payment: any) => (
-                  <div key={payment.id} className="border p-3 rounded">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div><strong>Date:</strong> {format(new Date(payment.created_at), "dd/MM/yyyy HH:mm")}</div>
-                      <div><strong>Amount:</strong> KSh {Number(payment.amount).toLocaleString()}</div>
-                      <div><strong>Method:</strong> {payment.payment_method}</div>
-                      <div><strong>Status:</strong> {payment.status}</div>
-                      {payment.mpesa_code && (
-                        <div className="col-span-2"><strong>M-Pesa Code:</strong> {payment.mpesa_code}</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                
-                {showPaymentHistory.payments.length === 0 && (
-                  <div className="text-center py-4 text-gray-500">
-                    No payment history found for this delivery.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* EDIT FORM MODAL - WITH CREDIT SYSTEM */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
@@ -1345,26 +1306,48 @@ export function PaymentsSection() {
                       </div>
                     )}
                     <div>
-                      <label className="block text-sm font-medium mb-1">Total Amount Paid So Far</label>
+                      <label className="block text-sm font-medium mb-1">Current Amount Paid</label>
                       <input
                         type="number"
-                        value={calculateTotalPaid(editingPayment?.delivery_id || formData.delivery_id)}
+                        value={formData.existing_paid_amount}
                         readOnly
                         className="w-full p-2 border rounded bg-gray-100"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Additional Payment Amount *</label>
+                      <label className="block text-sm font-medium mb-1">Amount to Add *</label>
                       <input
                         type="number"
-                        name="additional_payment_amount"
-                        value={formData.additional_payment_amount || ''}
+                        name="new_payment_amount"
+                        value={formData.new_payment_amount || ''}
                         onChange={handleInputChange}
                         min="0"
                         required
                         className="w-full p-2 border rounded"
-                        placeholder="Enter additional payment"
+                        placeholder="Enter amount to add"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Available Credit</label>
+                      <input
+                        type="number"
+                        value={formData.credit_available}
+                        readOnly
+                        className="w-full p-2 border rounded bg-gray-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Use Credit?</label>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          name="use_credit"
+                          checked={formData.use_credit}
+                          onChange={handleInputChange}
+                          className="mr-2"
+                        />
+                        <span>Apply credit to this payment</span>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Payment Mode</label>
@@ -1388,32 +1371,33 @@ export function PaymentsSection() {
                         className="w-full p-2 border rounded"
                       />
                     </div>
-                    
-                    {/* CREDIT USAGE SECTION */}
-                    {getCustomerCredit(formData.customer_id) > 0 && (
-                      <div className="md:col-span-2">
-                        <div className="border rounded p-3 bg-blue-50">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h4 className="font-medium text-sm">Available Credit</h4>
-                              <p className="text-sm text-gray-600">
-                                Customer has KSh {getCustomerCredit(formData.customer_id).toLocaleString()} credit available
-                              </p>
-                            </div>
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                name="use_credit"
-                                checked={formData.use_credit}
-                                onChange={handleInputChange}
-                                className="mr-2"
-                              />
-                              <span className="text-sm font-medium">Use Credit</span>
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Due Date</label>
+                      <input
+                        type="date"
+                        name="due_date"
+                        value={formData.due_date}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Final Status</label>
+                      <select
+                        name="status"
+                        value={formData.status}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="pending_verification">Pending Verification</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="failed">Failed</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-4">
@@ -1434,11 +1418,54 @@ export function PaymentsSection() {
                     >
                       {updatePaymentMutation.isPending || createPaymentMutation.isPending 
                         ? (editingPayment ? 'Updating...' : 'Creating...') 
-                        : editingPayment ? 'Update Payment' : 'Create Payment'}
+                        : editingPayment ? 'Add Payment' : 'Create Payment'}
                     </Button>
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT HISTORY MODAL - NEW */}
+      {showPaymentHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">
+                  Payment History for Delivery {showPaymentHistory.payments[0]?.deliveries?.delivery_note_no || 'Unknown'}
+                </h3>
+                <button 
+                  onClick={() => setShowPaymentHistory(null)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-2">
+                {showPaymentHistory.payments.map((payment: any) => (
+                  <div key={payment.id} className="border p-3 rounded">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div><strong>Date:</strong> {format(new Date(payment.created_at), "dd/MM/yyyy HH:mm")}</div>
+                      <div><strong>Amount:</strong> KSh {Number(payment.amount).toLocaleString()}</div>
+                      <div><strong>Method:</strong> {payment.payment_method}</div>
+                      <div><strong>Status:</strong> {payment.status}</div>
+                      {payment.mpesa_code && (
+                        <div className="col-span-2"><strong>M-Pesa Code:</strong> {payment.mpesa_code}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                
+                {showPaymentHistory.payments.length === 0 && (
+                  <div className="text-center py-4 text-gray-500">
+                    No payment history found for this delivery.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
