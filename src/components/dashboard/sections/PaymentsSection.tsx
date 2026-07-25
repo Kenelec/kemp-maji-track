@@ -34,6 +34,7 @@ export function PaymentsSection() {
   
   // NEW: Form state for editing
   const [formData, setFormData] = useState({
+    id: '',
     customer_id: '',
     delivery_id: '',
     amount: 0,
@@ -316,7 +317,7 @@ export function PaymentsSection() {
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation with correct status values
+  // NEW: Create payment mutation - only for NEW payments
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
@@ -390,6 +391,7 @@ export function PaymentsSection() {
       setIsFormOpen(false);
       setEditingPayment(null);
       setFormData({
+        id: '',
         customer_id: '',
         delivery_id: '',
         amount: 0,
@@ -410,66 +412,54 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation with correct status values
+  // NEW: Update payment mutation - only for EXISTING payments
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
       const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
       const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
       
-      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
-      const totalPaid = calculateTotalPaid(paymentData.delivery_id);
-      const deliveryTotal = Number(delivery?.total_amount || 0);
-      const balance = deliveryTotal - totalPaid;
-      
-      // Calculate new total and determine status
-      const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
-      let finalStatusCalculated = 'pending';
-      
-      if (newTotalPaid >= deliveryTotal) {
-        finalStatusCalculated = 'paid';
-      } else if (newTotalPaid === 0) {
-        finalStatusCalculated = 'pending';
-      } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'pending';
-      }
-      
-      // Create the payment record
+      // Update the existing payment record
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
-        .insert([{
-          customer_id: paymentData.customer_id,
-          delivery_id: paymentData.delivery_id,
+        .update({
           amount: paymentData.new_payment_amount,
           due_date: paymentData.due_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatusCalculated
-        }])
+          status: finalStatus
+        })
+        .eq('id', paymentData.id)
         .select()
         .single();
 
       if (paymentError) throw paymentError;
       
-      // Check if there's overpayment that should become credit
-      if (newTotalPaid > deliveryTotal) {
-        const creditAmount = newTotalPaid - deliveryTotal;
-        
-        await supabase
-          .from('payments')
-          .insert([{
-            customer_id: paymentData.customer_id,
-            amount: creditAmount,
-            due_date: new Date().toISOString().split('T')[0],
-            payment_method: paymentData.payment_method,
-            status: 'pending' // Use allowed status for credit
-          }]);
+      // Update delivery payment status based on total payments for this delivery
+      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
+      const allPaymentsForDelivery = payments?.filter((p: any) => p.delivery_id === paymentData.delivery_id) || [];
+      const totalPaid = allPaymentsForDelivery.reduce((sum: number, p: any) => {
+        if (p.id === paymentData.id) {
+          return sum + Number(paymentData.new_payment_amount || 0); // Use updated amount
+        } else {
+          return sum + Number(p.amount || 0);
+        }
+      }, 0);
+      
+      const deliveryTotal = Number(delivery?.total_amount || 0);
+      let deliveryStatus = 'pending';
+      if (totalPaid >= deliveryTotal) {
+        deliveryStatus = 'paid';
+      } else if (totalPaid === 0) {
+        deliveryStatus = 'pending';
+      } else if (totalPaid < deliveryTotal) {
+        deliveryStatus = 'pending';
       }
       
       // Update delivery payment status
       await supabase
         .from('deliveries')
-        .update({ payment_status: finalStatusCalculated })
+        .update({ payment_status: deliveryStatus })
         .eq('id', paymentData.delivery_id);
 
       return payment;
@@ -484,6 +474,7 @@ export function PaymentsSection() {
       setIsFormOpen(false);
       setEditingPayment(null);
       setFormData({
+        id: '',
         customer_id: '',
         delivery_id: '',
         amount: 0,
@@ -537,6 +528,7 @@ export function PaymentsSection() {
     
     // Populate form data with payment details and calculated amounts
     setFormData({
+      id: payment.id, // NEW: Include ID for updates
       customer_id: payment.customer_id || '',
       delivery_id: payment.delivery_id || '', // Keep delivery_id for reference
       amount: totalPaid, // Show total paid so far
@@ -544,7 +536,7 @@ export function PaymentsSection() {
       payment_method: payment.payment_method || 'cash',
       mpesa_code: payment.mpesa_code || '',
       status: payment.status || 'pending',
-      new_payment_amount: 0 // Start with 0 for new payment
+      new_payment_amount: payment.amount || 0 // NEW: Set current amount as new amount for editing
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -565,9 +557,11 @@ export function PaymentsSection() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingPayment) {
+    if (editingPayment && formData.id) {
+      // Update existing payment
       updatePaymentMutation.mutate(formData);
     } else {
+      // Create new payment
       createPaymentMutation.mutate(formData);
     }
   };
@@ -594,6 +588,7 @@ export function PaymentsSection() {
           <Button className="bg-gradient-primary" size="sm" onClick={() => {
             setEditingPayment(null);
             setFormData({
+              id: '',
               customer_id: '',
               delivery_id: '',
               amount: 0,
@@ -1071,7 +1066,7 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - WITH CREDIT SYSTEM */}
+      {/* EDIT FORM MODAL - WITH CORRECT UPDATE LOGIC */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1148,25 +1143,16 @@ export function PaymentsSection() {
                       </div>
                     )}
                     <div>
-                      <label className="block text-sm font-medium mb-1">Total Amount Paid So Far</label>
+                      <label className="block text-sm font-medium mb-1">Current Amount</label>
                       <input
                         type="number"
-                        value={formData.amount}
-                        readOnly
-                        className="w-full p-2 border rounded bg-gray-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Amount to Pay Now *</label>
-                      <input
-                        type="number"
-                        name="new_payment_amount"
-                        value={formData.new_payment_amount || ''}
+                        value={formData.new_payment_amount}
                         onChange={handleInputChange}
                         min="0"
                         required
+                        name="new_payment_amount"
                         className="w-full p-2 border rounded"
-                        placeholder="Enter amount to pay"
+                        placeholder="Enter amount"
                       />
                     </div>
                     <div>
@@ -1238,7 +1224,7 @@ export function PaymentsSection() {
                     >
                       {updatePaymentMutation.isPending || createPaymentMutation.isPending 
                         ? (editingPayment ? 'Updating...' : 'Creating...') 
-                        : editingPayment ? 'Add Payment' : 'Create Payment'}
+                        : editingPayment ? 'Update Payment' : 'Create Payment'}
                     </Button>
                   </div>
                 </form>
