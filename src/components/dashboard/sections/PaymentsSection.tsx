@@ -43,8 +43,7 @@ export function PaymentsSection() {
     credit_available: 0, // NEW: Available credit
     use_credit: false, // NEW: Whether to use credit
     payment_method: 'cash',
-    mpesa_code: '',
-    due_date: new Date().toISOString().split('T')[0] // NEW: Add due date
+    mpesa_code: ''
   });
 
   // NEW: Loading states for dependent data
@@ -379,7 +378,8 @@ export function PaymentsSection() {
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
-      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
+      // From your constraints, the allowed statuses are probably in the check constraint
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed', 'credit'];
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const totalPaid = calculateTotalPaid(paymentData.delivery_id);
@@ -405,14 +405,14 @@ export function PaymentsSection() {
         finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
       }
       
-      // Create the payment record - INCLUDE due_date
+      // Create the payment record - use today's date for due_date
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
           amount: paymentData.new_payment_amount, // This is the NEW amount to add
-          due_date: paymentData.due_date, // Include due_date to satisfy constraint
+          due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -440,7 +440,7 @@ export function PaymentsSection() {
           .insert([{
             customer_id: paymentData.customer_id,
             amount: finalCreditAmount,
-            due_date: paymentData.due_date, // Include due_date to satisfy constraint
+            due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
             payment_method: paymentData.payment_method,
             status: 'credit'
           }]);
@@ -472,8 +472,7 @@ export function PaymentsSection() {
         credit_available: 0,
         use_credit: false,
         payment_method: 'cash',
-        mpesa_code: '',
-        due_date: new Date().toISOString().split('T')[0] // Reset due date
+        mpesa_code: ''
       });
     },
     onError: (error: any) => {
@@ -490,7 +489,7 @@ export function PaymentsSection() {
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
-      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed', 'credit'];
       
       // Get current total paid for this delivery (excluding this payment if updating)
       const existingPayments = payments?.filter((p: any) => 
@@ -529,7 +528,7 @@ export function PaymentsSection() {
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
           amount: paymentData.new_payment_amount, // This is the NEW amount to add
-          due_date: paymentData.due_date, // Include due_date to satisfy constraint
+          due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -557,7 +556,7 @@ export function PaymentsSection() {
           .insert([{
             customer_id: paymentData.customer_id,
             amount: finalCreditAmount,
-            due_date: paymentData.due_date, // Include due_date to satisfy constraint
+            due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
             payment_method: paymentData.payment_method,
             status: 'credit'
           }]);
@@ -589,8 +588,7 @@ export function PaymentsSection() {
         credit_available: 0,
         use_credit: false,
         payment_method: 'cash',
-        mpesa_code: '',
-        due_date: new Date().toISOString().split('T')[0] // Reset due date
+        mpesa_code: ''
       });
     },
     onError: (error: any) => {
@@ -644,8 +642,7 @@ export function PaymentsSection() {
       credit_available: customerCredit, // Show available credit
       use_credit: customerCredit > 0, // Auto-enable if credit available
       payment_method: payment.payment_method || 'cash',
-      mpesa_code: payment.mpesa_code || '',
-      due_date: payment.due_date || new Date().toISOString().split('T')[0] // Use existing due date or today
+      mpesa_code: payment.mpesa_code || ''
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -705,8 +702,7 @@ export function PaymentsSection() {
               credit_available: 0,
               use_credit: false,
               payment_method: 'cash',
-              mpesa_code: '',
-              due_date: new Date().toISOString().split('T')[0]
+              mpesa_code: ''
             });
             setIsFormOpen(true);
           }}>
@@ -1361,17 +1357,6 @@ export function PaymentsSection() {
                         value={formData.mpesa_code}
                         onChange={handleInputChange}
                         className="w-full p-2 border rounded"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Due Date *</label>
-                      <input
-                        type="date"
-                        name="due_date"
-                        value={formData.due_date}
-                        onChange={handleInputChange}
-                        className="w-full p-2 border rounded"
-                        required
                       />
                     </div>
                   </div>
