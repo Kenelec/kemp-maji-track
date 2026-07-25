@@ -12,7 +12,8 @@ import {
   Download,
   AlertTriangle,
   Navigation,
-  Clock
+  Clock,
+  Menu
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -120,63 +121,60 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     { id: "exports", label: "Exports", icon: Download },
   ];
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center space-x-3">
-            <img 
-              src={kempLogo} 
-              alt="KEMP Logo" 
-              className="w-8 h-8 md:w-10 md:h-10 object-contain"
-            />
-            <div>
-              <h1 className="text-lg md:text-xl font-bold text-primary">KEMP Maji Track</h1>
-              <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-xs md:text-sm ml-0">
-                Admin
-              </Badge>
+      <header className="border-b bg-card sticky top-0 z-30">
+        <div className="flex h-12 items-center justify-between px-2 md:px-4">
+          <div className="flex items-center space-x-2">
+            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen((v) => !v)} title="Toggle sidebar">
+              <Menu className="w-5 h-5" />
+            </Button>
+            <img src={kempLogo} alt="KEMP Logo" className="w-7 h-7 object-contain" />
+            <div className="hidden sm:block">
+              <h1 className="text-base font-bold text-primary leading-tight">KEMP Maji Track</h1>
+              <Badge variant="secondary" className="bg-tertiary/10 text-tertiary text-[10px] leading-none py-0.5">Admin</Badge>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2">
             <NotificationCenter userId={user?.id} />
-            <span className="text-sm text-muted-foreground">
-              Welcome, {user?.email}
-            </span>
+            <span className="text-xs text-muted-foreground hidden md:block">{user?.email}</span>
             <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
+              <LogOut className="w-4 h-4 md:mr-1" />
+              <span className="hidden md:inline">Logout</span>
             </Button>
           </div>
         </div>
       </header>
 
       <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 min-h-[calc(100vh-4rem)] border-r bg-card p-4">
-          <nav className="space-y-2">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Button
-                  key={item.id}
-                  variant={activeTab === item.id ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab(item.id)}
-                >
-                  <Icon className="w-4 h-4 mr-3" />
-                  {item.label}
-                </Button>
-              );
-            })}
-          </nav>
-        </aside>
+        {sidebarOpen && (
+          <aside className="w-56 min-h-[calc(100vh-3rem)] border-r bg-card p-2 shrink-0">
+            <nav className="space-y-1">
+              {menuItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Button
+                    key={item.id}
+                    variant={activeTab === item.id ? "default" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start text-xs"
+                    onClick={() => setActiveTab(item.id)}
+                  >
+                    <Icon className="w-4 h-4 mr-2" />
+                    {item.label}
+                  </Button>
+                );
+              })}
+            </nav>
+          </aside>
+        )}
 
-        {/* Main Content */}
-        <main className="flex-1 p-6">
-          <Alert className="mb-6 border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950">
+        <main className="flex-1 p-2 md:p-3 min-w-0">
+          <Alert className="mb-3 border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950 py-2">
             <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
+            <AlertDescription className="text-xs">
               Admin permissions: You can view and create records. Updates and deletions require Master Admin approval.
             </AlertDescription>
           </Alert>
