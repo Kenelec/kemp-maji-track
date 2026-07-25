@@ -70,7 +70,8 @@ export function PaymentsSection() {
           supabase.from('payments').select(`
             customer_id,
             amount,
-            status
+            status,
+            delivery_id
           `)
         ]);
         
@@ -101,12 +102,20 @@ export function PaymentsSection() {
     loadData();
   }, [toast]);
 
-  // NEW: Calculate total paid for a delivery
+  // NEW: Calculate total paid for a delivery (including all payments for that delivery)
   const calculateTotalPaid = (deliveryId: string) => {
     if (!payments) return 0;
     
-    const deliveryPayments = payments.filter((p: any) => p.delivery_id === deliveryId);
+    const deliveryPayments = payments.filter((p: any) => p.delivery_id === deliveryId && p.status !== 'credit');
     return deliveryPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  };
+
+  // NEW: Calculate number of payments made for a delivery
+  const calculatePaymentCount = (deliveryId: string) => {
+    if (!payments) return 0;
+    
+    const deliveryPayments = payments.filter((p: any) => p.delivery_id === deliveryId && p.status !== 'credit');
+    return deliveryPayments.length;
   };
 
   // NEW: Calculate balance for a delivery
@@ -356,7 +365,7 @@ export function PaymentsSection() {
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation - only for NEW payments
+  // NEW: Create payment mutation - only for NEW payments (adds to existing)
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
@@ -386,7 +395,7 @@ export function PaymentsSection() {
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'pending';
+        finalStatusCalculated = 'partial';
       }
       
       // Create the payment record
@@ -470,7 +479,7 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation - adds to existing payment
+  // NEW: Update payment mutation - adds to existing payment (NOT REPLACES)
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
@@ -505,7 +514,7 @@ export function PaymentsSection() {
       } else if (newTotalPaid === 0) {
         finalStatusCalculated = 'pending';
       } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'pending';
+        finalStatusCalculated = 'partial';
       }
       
       // Update the existing payment record with new amount
@@ -653,7 +662,7 @@ export function PaymentsSection() {
     e.preventDefault();
     
     if (editingPayment && formData.id) {
-      // Update existing payment
+      // Update existing payment (adds to existing total)
       updatePaymentMutation.mutate(formData);
     } else {
       // Create new payment
@@ -937,7 +946,22 @@ export function PaymentsSection() {
                           </div>
                         </TableHead>
                         
-                        {/* Due Date Column - REMOVED */}
+                        {/* Payment Count Column - NEW */}
+                        <TableHead 
+                          className="text-xs py-1 px-2 text-center"
+                          style={{ width: `${columnWidths.method}px` }}
+                        >
+                          <div className="flex items-center justify-between w-full h-full">
+                            <span className="flex-1 text-left">Payments</span>
+                            <div
+                              className="resize-handle w-2 h-full bg-transparent hover:bg-blue-200 cursor-col-resize flex items-center justify-center"
+                              onMouseDown={(e) => handleResizeStart('method', e)}
+                              style={{ cursor: 'col-resize' }}
+                            >
+                              <div className="w-px h-full bg-gray-300 hover:bg-blue-500"></div>
+                            </div>
+                          </div>
+                        </TableHead>
                         
                         {/* Method Column */}
                         <TableHead 
@@ -1027,6 +1051,7 @@ export function PaymentsSection() {
                         const deliveryTotal = payment.deliveries?.total_amount || 0;
                         const totalPaid = calculateTotalPaid(payment.delivery_id);
                         const balance = deliveryTotal - totalPaid;
+                        const paymentCount = calculatePaymentCount(payment.delivery_id);
                         const statusColor = getStatusColor(payment.status);
                         
                         return (
@@ -1118,6 +1143,15 @@ export function PaymentsSection() {
                                   KSh {balance.toLocaleString()}
                                 </span>
                               )}
+                            </TableCell>
+                            {/* Payment Count Column - NEW */}
+                            <TableCell 
+                              className="text-xs py-1 px-2 text-center align-middle"
+                              style={{ width: `${columnWidths.method}px` }}
+                            >
+                              <Badge variant="outline" className="text-[10px]">
+                                {paymentCount} payment{paymentCount !== 1 ? 's' : ''}
+                              </Badge>
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
@@ -1232,9 +1266,10 @@ export function PaymentsSection() {
                           {deliveries.filter(d => d.customer_id === formData.customer_id).map(delivery => {
                             const totalPaid = calculateTotalPaid(delivery.id);
                             const balance = delivery.total_amount - totalPaid;
+                            const paymentCount = calculatePaymentCount(delivery.id);
                             return (
                               <option key={delivery.id} value={delivery.id}>
-                                {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()}
+                                {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()} ({paymentCount} payment{paymentCount !== 1 ? 's' : ''})
                               </option>
                             );
                           })}
