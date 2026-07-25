@@ -39,10 +39,11 @@ export function PaymentsSection() {
     delivery_id: '',
     amount: 0,
     due_date: '',
+    delivery_date: '',
     payment_method: 'cash',
     mpesa_code: '',
     status: 'pending',
-    new_payment_amount: 0 // NEW: Separate field for new payment
+    additional_payment_amount: 0 // NEW: Field for additional payment
   });
 
   // NEW: Loading states for dependent data
@@ -109,17 +110,20 @@ export function PaymentsSection() {
     
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'amount' || name === 'new_payment_amount' ? Number(val) : val
+      [name]: name === 'amount' || name === 'additional_payment_amount' ? Number(val) : val
     }));
   };
 
   // NEW: Handle delivery change to update balance
   const handleDeliveryChange = (deliveryId: string) => {
     const balance = calculateBalance(deliveryId);
+    const delivery = deliveries.find((d: any) => d.id === deliveryId);
+    
     setFormData(prev => ({
       ...prev,
       delivery_id: deliveryId,
-      new_payment_amount: Math.min(balance, prev.new_payment_amount) // Don't exceed balance
+      delivery_date: delivery?.delivery_date || '',
+      additional_payment_amount: Math.min(balance, prev.additional_payment_amount) // Don't exceed balance
     }));
   };
 
@@ -132,6 +136,7 @@ export function PaymentsSection() {
 
   // NEW: Column widths state
   const [columnWidths, setColumnWidths] = useState({
+    delivery_date: 100,
     customer: 150,
     delivery: 100,
     products: 120,
@@ -192,6 +197,10 @@ export function PaymentsSection() {
       let aValue, bValue;
       
       switch (sortField) {
+        case 'deliveries.delivery_date':
+          aValue = new Date(a.deliveries?.delivery_date || 0).getTime();
+          bValue = new Date(b.deliveries?.delivery_date || 0).getTime();
+          break;
         case 'customers.customer_name':
           aValue = (a.customers?.customer_name || "").toLowerCase();
           bValue = (b.customers?.customer_name || "").toLowerCase();
@@ -314,6 +323,7 @@ export function PaymentsSection() {
     if (status === 'rejected') return "bg-red-500/10 text-red-500";
     if (status === 'failed') return "bg-red-500/10 text-red-500";
     if (status === 'completed') return "bg-green-500/10 text-green-500";
+    if (status === 'credit') return "bg-blue-500/10 text-blue-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
@@ -321,7 +331,7 @@ export function PaymentsSection() {
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
-      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed', 'credit'];
       const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
@@ -330,7 +340,7 @@ export function PaymentsSection() {
       const balance = deliveryTotal - totalPaid;
       
       // Calculate new total and determine status
-      const newTotalPaid = totalPaid + Number(paymentData.new_payment_amount || 0);
+      const newTotalPaid = totalPaid + Number(paymentData.additional_payment_amount || 0);
       let finalStatusCalculated = 'pending';
       
       if (newTotalPaid >= deliveryTotal) {
@@ -347,8 +357,9 @@ export function PaymentsSection() {
         .insert([{
           customer_id: paymentData.customer_id,
           delivery_id: paymentData.delivery_id,
-          amount: paymentData.new_payment_amount,
+          amount: paymentData.additional_payment_amount,
           due_date: paymentData.due_date,
+          delivery_date: paymentData.delivery_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
@@ -368,8 +379,9 @@ export function PaymentsSection() {
             customer_id: paymentData.customer_id,
             amount: creditAmount,
             due_date: new Date().toISOString().split('T')[0],
+            delivery_date: paymentData.delivery_date,
             payment_method: paymentData.payment_method,
-            status: 'pending' // Use allowed status for credit
+            status: 'credit' // Use credit status for overpayment
           }]);
       }
       
@@ -396,10 +408,11 @@ export function PaymentsSection() {
         delivery_id: '',
         amount: 0,
         due_date: '',
+        delivery_date: '',
         payment_method: 'cash',
         mpesa_code: '',
         status: 'pending',
-        new_payment_amount: 0
+        additional_payment_amount: 0
       });
     },
     onError: (error: any) => {
@@ -412,22 +425,45 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Update payment mutation - only for EXISTING payments
+  // NEW: Update payment mutation - adds to existing payment
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
-      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed'];
+      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed', 'credit'];
       const finalStatus = allowedStatuses.includes(paymentData.status) ? paymentData.status : 'pending';
       
-      // Update the existing payment record
+      // Get current total paid for this delivery (excluding this payment if updating)
+      const existingPayments = payments?.filter((p: any) => 
+        p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id
+      ) || [];
+      const existingTotalPaid = existingPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+      
+      // Calculate new total (existing + additional payment)
+      const newTotalPaid = existingTotalPaid + Number(paymentData.additional_payment_amount || 0);
+      
+      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
+      const deliveryTotal = Number(delivery?.total_amount || 0);
+      
+      // Determine status based on new total
+      let finalStatusCalculated = 'pending';
+      if (newTotalPaid >= deliveryTotal) {
+        finalStatusCalculated = 'paid';
+      } else if (newTotalPaid === 0) {
+        finalStatusCalculated = 'pending';
+      } else if (newTotalPaid < deliveryTotal) {
+        finalStatusCalculated = 'pending';
+      }
+      
+      // Update the existing payment record with new amount
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .update({
-          amount: paymentData.new_payment_amount,
+          amount: paymentData.additional_payment_amount,
           due_date: paymentData.due_date,
+          delivery_date: paymentData.delivery_date,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatus
+          status: finalStatusCalculated
         })
         .eq('id', paymentData.id)
         .select()
@@ -435,31 +471,34 @@ export function PaymentsSection() {
 
       if (paymentError) throw paymentError;
       
-      // Update delivery payment status based on total payments for this delivery
-      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
-      const allPaymentsForDelivery = payments?.filter((p: any) => p.delivery_id === paymentData.delivery_id) || [];
-      const totalPaid = allPaymentsForDelivery.reduce((sum: number, p: any) => {
-        if (p.id === paymentData.id) {
-          return sum + Number(paymentData.new_payment_amount || 0); // Use updated amount
-        } else {
-          return sum + Number(p.amount || 0);
-        }
-      }, 0);
-      
-      const deliveryTotal = Number(delivery?.total_amount || 0);
-      let deliveryStatus = 'pending';
-      if (totalPaid >= deliveryTotal) {
-        deliveryStatus = 'paid';
-      } else if (totalPaid === 0) {
-        deliveryStatus = 'pending';
-      } else if (totalPaid < deliveryTotal) {
-        deliveryStatus = 'pending';
+      // Check if there's overpayment that should become credit
+      if (newTotalPaid > deliveryTotal) {
+        const creditAmount = newTotalPaid - deliveryTotal;
+        
+        // First, delete any existing credit for this customer (to avoid duplicates)
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('customer_id', paymentData.customer_id)
+          .eq('status', 'credit');
+        
+        // Then create new credit
+        await supabase
+          .from('payments')
+          .insert([{
+            customer_id: paymentData.customer_id,
+            amount: creditAmount,
+            due_date: new Date().toISOString().split('T')[0],
+            delivery_date: paymentData.delivery_date,
+            payment_method: paymentData.payment_method,
+            status: 'credit' // Use credit status for overpayment
+          }]);
       }
       
       // Update delivery payment status
       await supabase
         .from('deliveries')
-        .update({ payment_status: deliveryStatus })
+        .update({ payment_status: finalStatusCalculated })
         .eq('id', paymentData.delivery_id);
 
       return payment;
@@ -479,10 +518,11 @@ export function PaymentsSection() {
         delivery_id: '',
         amount: 0,
         due_date: '',
+        delivery_date: '',
         payment_method: 'cash',
         mpesa_code: '',
         status: 'pending',
-        new_payment_amount: 0
+        additional_payment_amount: 0
       });
     },
     onError: (error: any) => {
@@ -528,15 +568,16 @@ export function PaymentsSection() {
     
     // Populate form data with payment details and calculated amounts
     setFormData({
-      id: payment.id, // NEW: Include ID for updates
+      id: payment.id, // Include ID for updates
       customer_id: payment.customer_id || '',
       delivery_id: payment.delivery_id || '', // Keep delivery_id for reference
       amount: totalPaid, // Show total paid so far
       due_date: payment.due_date || '',
+      delivery_date: payment.delivery_date || payment.deliveries?.delivery_date || '',
       payment_method: payment.payment_method || 'cash',
       mpesa_code: payment.mpesa_code || '',
       status: payment.status || 'pending',
-      new_payment_amount: payment.amount || 0 // NEW: Set current amount as new amount for editing
+      additional_payment_amount: 0 // Start with 0 for additional payment
     });
     setEditingPayment(payment);
     setIsFormOpen(true);
@@ -593,10 +634,11 @@ export function PaymentsSection() {
               delivery_id: '',
               amount: 0,
               due_date: '',
+              delivery_date: '',
               payment_method: 'cash',
               mpesa_code: '',
               status: 'pending',
-              new_payment_amount: 0
+              additional_payment_amount: 0
             });
             setIsFormOpen(true);
           }}>
@@ -658,6 +700,28 @@ export function PaymentsSection() {
                   <Table className="min-w-max">
                     <TableHeader className="bg-background">
                       <TableRow className="hover:bg-transparent">
+                        {/* Delivery Date Column - FIRST COLUMN */}
+                        <TableHead 
+                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
+                          style={{ width: `${columnWidths.delivery_date}px` }}
+                        >
+                          <div className="flex items-center justify-between w-full h-full">
+                            <span 
+                              className="flex-1 text-left"
+                              onClick={() => handleSort('deliveries.delivery_date')}
+                            >
+                              Delivery Date {getSortIcon('deliveries.delivery_date')}
+                            </span>
+                            <div
+                              className="resize-handle w-2 h-full bg-transparent hover:bg-blue-200 cursor-col-resize flex items-center justify-center"
+                              onMouseDown={(e) => handleResizeStart('delivery_date', e)}
+                              style={{ cursor: 'col-resize' }}
+                            >
+                              <div className="w-px h-full bg-gray-300 hover:bg-blue-500"></div>
+                            </div>
+                          </div>
+                        </TableHead>
+                        
                         {/* Customer Column */}
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 sticky left-0 bg-background z-[2000] !important text-xs py-1 px-2 text-center"
@@ -819,27 +883,7 @@ export function PaymentsSection() {
                           </div>
                         </TableHead>
                         
-                        {/* Due Date Column */}
-                        <TableHead 
-                          className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
-                          style={{ width: `${columnWidths.due}px` }}
-                        >
-                          <div className="flex items-center justify-between w-full h-full">
-                            <span 
-                              className="flex-1 text-left"
-                              onClick={() => handleSort('due_date')}
-                            >
-                              Due Date {getSortIcon('due_date')}
-                            </span>
-                            <div
-                              className="resize-handle w-2 h-full bg-transparent hover:bg-blue-200 cursor-col-resize flex items-center justify-center"
-                              onMouseDown={(e) => handleResizeStart('due', e)}
-                              style={{ cursor: 'col-resize' }}
-                            >
-                              <div className="w-px h-full bg-gray-300 hover:bg-blue-500"></div>
-                            </div>
-                          </div>
-                        </TableHead>
+                        {/* Due Date Column - REMOVED */}
                         
                         {/* Method Column */}
                         <TableHead 
@@ -933,6 +977,15 @@ export function PaymentsSection() {
                         
                         return (
                           <TableRow key={payment.id} className="hover:bg-gray-50">
+                            {/* Delivery Date - FIRST COLUMN */}
+                            <TableCell 
+                              className="text-xs py-1 px-2 text-center align-middle"
+                              style={{ width: `${columnWidths.delivery_date}px` }}
+                            >
+                              {payment.delivery_date ? format(new Date(payment.delivery_date), "dd/MM/yyyy") : 
+                               payment.deliveries?.delivery_date ? format(new Date(payment.deliveries.delivery_date), "dd/MM/yyyy") : "—"}
+                            </TableCell>
+                            
                             <TableCell 
                               className="font-medium sticky left-0 bg-background z-[1500] !important text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.customer}px` }}
@@ -999,15 +1052,19 @@ export function PaymentsSection() {
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.balance}px` }}
                             >
-                              <span className={balance > 0 ? "text-red-600" : "text-green-600"}>
-                                KSh {balance.toLocaleString()}
-                              </span>
-                            </TableCell>
-                            <TableCell 
-                              className="text-xs py-1 px-2 text-center align-middle"
-                              style={{ width: `${columnWidths.due}px` }}
-                            >
-                              {payment.due_date ? format(new Date(payment.due_date), "dd/MM/yyyy") : "—"}
+                              {balance > 0 ? (
+                                <span className="text-red-600">
+                                  KSh {balance.toLocaleString()}
+                                </span>
+                              ) : balance < 0 ? (
+                                <span className="text-blue-600">
+                                  Credit KSh {Math.abs(balance).toLocaleString()}
+                                </span>
+                              ) : (
+                                <span className="text-green-600">
+                                  KSh {balance.toLocaleString()}
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell 
                               className="text-xs py-1 px-2 text-center align-middle"
@@ -1026,7 +1083,7 @@ export function PaymentsSection() {
                               style={{ width: `${columnWidths.status}px` }}
                             >
                               <Badge className={statusColor} variant="secondary">
-                                {payment.status}
+                                {balance < 0 ? 'Credit' : payment.status}
                               </Badge>
                             </TableCell>
                             <TableCell 
@@ -1066,7 +1123,7 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - WITH CORRECT UPDATE LOGIC */}
+      {/* EDIT FORM MODAL - WITH CORRECT LOGIC */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1143,24 +1200,33 @@ export function PaymentsSection() {
                       </div>
                     )}
                     <div>
-                      <label className="block text-sm font-medium mb-1">Current Amount</label>
+                      <label className="block text-sm font-medium mb-1">Total Amount Paid So Far</label>
                       <input
                         type="number"
-                        value={formData.new_payment_amount}
-                        onChange={handleInputChange}
-                        min="0"
-                        required
-                        name="new_payment_amount"
-                        className="w-full p-2 border rounded"
-                        placeholder="Enter amount"
+                        value={calculateTotalPaid(editingPayment?.delivery_id || formData.delivery_id)}
+                        readOnly
+                        className="w-full p-2 border rounded bg-gray-100"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Due Date</label>
+                      <label className="block text-sm font-medium mb-1">Additional Payment Amount *</label>
+                      <input
+                        type="number"
+                        name="additional_payment_amount"
+                        value={formData.additional_payment_amount || ''}
+                        onChange={handleInputChange}
+                        min="0"
+                        required
+                        className="w-full p-2 border rounded"
+                        placeholder="Enter additional payment"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Delivery Date</label>
                       <input
                         type="date"
-                        name="due_date"
-                        value={formData.due_date}
+                        name="delivery_date"
+                        value={formData.delivery_date}
                         onChange={handleInputChange}
                         className="w-full p-2 border rounded"
                       />
@@ -1186,23 +1252,6 @@ export function PaymentsSection() {
                         onChange={handleInputChange}
                         className="w-full p-2 border rounded"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Status</label>
-                      <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
-                        className="w-full p-2 border rounded"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="paid">Paid</option>
-                        <option value="overdue">Overdue</option>
-                        <option value="pending_verification">Pending Verification</option>
-                        <option value="rejected">Rejected</option>
-                        <option value="failed">Failed</option>
-                        <option value="completed">Completed</option>
-                      </select>
                     </div>
                   </div>
 
