@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { NotificationService } from "@/services/notificationService";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 interface Customer {
   id: string;
@@ -34,14 +36,16 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [allDeliveries, setAllDeliveries] = useState<Delivery[]>([]);
+  const [paidByDelivery, setPaidByDelivery] = useState<Record<string, number>>({});
+  const [creditBalance, setCreditBalance] = useState(0);
   const [formData, setFormData] = useState({
     customer_id: "",
     delivery_id: "",
     amount: "",
     payment_method: "cash",
     mpesa_code: "",
+    apply_credit: false,
   });
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -49,13 +53,10 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   useEffect(() => {
     if (open) {
       setDataLoaded(false);
-      fetchFormData().then(() => {
-        setDataLoaded(true);
-      });
+      fetchFormData().then(() => setDataLoaded(true));
     }
   }, [open]);
 
-  // Populate form when editing and data is loaded
   useEffect(() => {
     if (open && dataLoaded && editData) {
       setFormData({
@@ -64,41 +65,66 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         amount: editData.amount?.toString() || "",
         payment_method: editData.payment_method || "cash",
         mpesa_code: editData.mpesa_code || "",
+        apply_credit: false,
       });
     } else if (open && !editData) {
       resetForm();
     }
   }, [open, dataLoaded, editData]);
 
+  // Refresh credit balance when customer changes
+  useEffect(() => {
+    if (formData.customer_id) {
+      fetchCreditBalance(formData.customer_id);
+    } else {
+      setCreditBalance(0);
+    }
+  }, [formData.customer_id]);
+
   const fetchFormData = async () => {
     try {
-      // Fetch customers
-      const { data: customersData, error: customersError } = await supabase
-        .from('customers')
-        .select('id, customer_name')
-        .order('customer_name', { ascending: true });
+      const { data: customersData } = await supabase
+        .from("customers")
+        .select("id, customer_name")
+        .order("customer_name", { ascending: true });
 
-      if (customersError) throw customersError;
+      const { data: deliveriesData } = await supabase
+        .from("deliveries")
+        .select("id, delivery_date, total_amount, qty, unit_rate, customer_id, payment_status")
+        .order("delivery_date", { ascending: false });
 
-      // Fetch all deliveries - exclude already paid ones (unless editing)
-      const { data: deliveriesData, error: deliveriesError } = await supabase
-        .from('deliveries')
-        .select('id, delivery_date, total_amount, qty, unit_rate, customer_id, payment_status')
-        .order('delivery_date', { ascending: false });
+      // Sum successful payments per delivery to compute remaining balances
+      const { data: paymentsData } = await supabase
+        .from("payments")
+        .select("delivery_id, amount, status")
+        .in("status", ["paid", "completed"]);
 
-      if (deliveriesError) throw deliveriesError;
-
-      // Filter out paid deliveries unless we're editing
-      const availableDeliveries = (deliveriesData || []).filter(d => 
-        d.payment_status !== 'paid'
-      );
+      const totals: Record<string, number> = {};
+      (paymentsData || []).forEach((p: any) => {
+        if (!p.delivery_id) return;
+        totals[p.delivery_id] = (totals[p.delivery_id] || 0) + Number(p.amount || 0);
+      });
 
       setCustomers(customersData || []);
       setAllDeliveries(deliveriesData || []);
-      setDeliveries(availableDeliveries);
+      setPaidByDelivery(totals);
     } catch (error) {
-      console.error('Error fetching form data', error);
+      console.error("Error fetching form data", error);
     }
+  };
+
+  const fetchCreditBalance = async (customerId: string) => {
+    const { data, error } = await supabase
+      .from("customer_credits")
+      .select("amount")
+      .eq("customer_id", customerId);
+    if (error) {
+      console.error("credit fetch error", error);
+      setCreditBalance(0);
+      return;
+    }
+    const bal = (data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    setCreditBalance(bal);
   };
 
   const resetForm = () => {
@@ -108,37 +134,42 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       amount: "",
       payment_method: "cash",
       mpesa_code: "",
+      apply_credit: false,
     });
   };
 
-  // Returns only valid database status values: 'paid' or 'pending'
-  const calculatePaymentStatus = (deliveryId: string, paymentAmount: number): 'paid' | 'pending' => {
-    const delivery = allDeliveries.find(d => d.id === deliveryId);
-    if (!delivery) return 'pending';
+  const selectedDelivery = allDeliveries.find((d) => d.id === formData.delivery_id);
+  const alreadyPaid = selectedDelivery ? paidByDelivery[selectedDelivery.id] || 0 : 0;
+  const remaining = selectedDelivery
+    ? Math.max(0, Number(selectedDelivery.total_amount) - alreadyPaid - (editData ? 0 : 0))
+    : 0;
 
-    const deliveryAmount = Number(delivery.total_amount);
-    
-    if (paymentAmount >= deliveryAmount) {
-      return 'paid';
+  // Deliveries available for the selected customer with remaining balance > 0
+  const filteredDeliveries = useMemo(() => {
+    return allDeliveries.filter((d) => {
+      if (d.customer_id !== formData.customer_id) return false;
+      if (editData && d.id === editData.delivery_id) return true;
+      const paid = paidByDelivery[d.id] || 0;
+      return Number(d.total_amount) - paid > 0.0001;
+    });
+  }, [allDeliveries, paidByDelivery, formData.customer_id, editData]);
+
+  const handleApplyCreditToggle = (checked: boolean) => {
+    if (checked && selectedDelivery) {
+      // Prefill amount with min(remaining, creditBalance)
+      const auto = Math.min(remaining || 0, creditBalance);
+      setFormData((f) => ({
+        ...f,
+        apply_credit: true,
+        payment_method: "credit",
+        amount: auto > 0 ? auto.toString() : f.amount,
+      }));
     } else {
-      return 'pending';
-    }
-  };
-
-  // Calculate display info for status preview
-  const getPaymentStatusInfo = (deliveryId: string, paymentAmount: number) => {
-    const delivery = allDeliveries.find(d => d.id === deliveryId);
-    if (!delivery) return { status: 'pending', label: 'Pending', difference: 0 };
-
-    const deliveryAmount = Number(delivery.total_amount);
-    const diff = paymentAmount - deliveryAmount;
-
-    if (diff > 0) {
-      return { status: 'paid', label: `Paid (Credit: KSh ${diff.toLocaleString()})`, difference: diff };
-    } else if (diff < 0) {
-      return { status: 'pending', label: `Pending (Balance: KSh ${Math.abs(diff).toLocaleString()})`, difference: diff };
-    } else {
-      return { status: 'paid', label: 'Fully Paid', difference: 0 };
+      setFormData((f) => ({
+        ...f,
+        apply_credit: false,
+        payment_method: f.payment_method === "credit" ? "cash" : f.payment_method,
+      }));
     }
   };
 
@@ -148,99 +179,97 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
     try {
       const paymentAmount = Number(formData.amount);
-      const status = calculatePaymentStatus(formData.delivery_id, paymentAmount);
+      if (!paymentAmount || paymentAmount <= 0) throw new Error("Enter a valid amount");
+      if (!selectedDelivery) throw new Error("Select a delivery");
 
-      // Check if a payment already exists for this delivery (for new payments only)
-      if (!editData && formData.delivery_id) {
-        const { data: existingPayment } = await supabase
-          .from('payments')
-          .select('id')
-          .eq('delivery_id', formData.delivery_id)
-          .eq('status', 'paid')
-          .maybeSingle();
+      const today = new Date().toISOString().split("T")[0];
 
-        if (existingPayment) {
-          throw new Error("This delivery has already been fully paid.");
+      // Applied credit path (only when not editing an existing row)
+      if (formData.apply_credit && !editData) {
+        if (paymentAmount > creditBalance + 0.0001) {
+          throw new Error(`Only KSh ${creditBalance.toLocaleString()} credit available`);
         }
       }
 
-      // Auto-set due_date to today
-      const today = new Date().toISOString().split("T")[0];
-
       if (editData) {
-        // Update existing payment
+        // Update the specific existing payment row only
         const { error } = await supabase
-          .from('payments')
+          .from("payments")
           .update({
             customer_id: formData.customer_id,
             delivery_id: formData.delivery_id,
             amount: paymentAmount,
             due_date: today,
             payment_method: formData.payment_method,
-            mpesa_code: formData.payment_method === 'mpesa' ? formData.mpesa_code : null,
-            status: status,
-            updated_at: new Date().toISOString()
+            mpesa_code: formData.payment_method === "mpesa" ? formData.mpesa_code : null,
+            status: "paid",
+            updated_at: new Date().toISOString(),
           })
-          .eq('id', editData.id);
-
+          .eq("id", editData.id);
         if (error) throw error;
 
-        toast({
-          title: "Payment updated",
-          description: "Payment has been updated successfully.",
-        });
+        toast({ title: "Payment updated" });
       } else {
-        // Create new payment
-        const { data: paymentData, error } = await supabase
-          .from('payments')
-          .insert([{
-            customer_id: formData.customer_id,
-            delivery_id: formData.delivery_id,
-            amount: paymentAmount,
-            due_date: today,
-            payment_method: formData.payment_method,
-            mpesa_code: formData.payment_method === 'mpesa' ? formData.mpesa_code : null,
-            status: status,
-            created_at: new Date().toISOString()
-          }])
+        // Always create a NEW row per payment (additive)
+        const { data: paymentRow, error } = await supabase
+          .from("payments")
+          .insert([
+            {
+              customer_id: formData.customer_id,
+              delivery_id: formData.delivery_id,
+              amount: paymentAmount,
+              due_date: today,
+              payment_method: formData.payment_method,
+              mpesa_code: formData.payment_method === "mpesa" ? formData.mpesa_code : null,
+              status: "paid",
+              created_at: new Date().toISOString(),
+            },
+          ])
           .select()
           .single();
-
         if (error) throw error;
 
-        // Update delivery payment status if fully paid
-        if (status === 'paid') {
-          await supabase
-            .from('deliveries')
-            .update({ 
-              payment_status: 'paid',
-              payment_date: new Date().toISOString()
-            })
-            .eq('id', formData.delivery_id);
+        // If credit was applied, deduct from customer_credits ledger
+        if (formData.apply_credit) {
+          await supabase.from("customer_credits").insert({
+            customer_id: formData.customer_id,
+            amount: -paymentAmount,
+            source_payment_id: paymentRow.id,
+            source_delivery_id: formData.delivery_id,
+            note: "Credit applied to delivery payment",
+          });
         }
 
-        // Send payment notification to admins
+        // If overpaid vs remaining, park excess as credit
+        const totalNowPaid = alreadyPaid + paymentAmount;
+        const overpay = totalNowPaid - Number(selectedDelivery.total_amount);
+        if (overpay > 0.0001) {
+          await supabase.from("customer_credits").insert({
+            customer_id: formData.customer_id,
+            amount: overpay,
+            source_payment_id: paymentRow.id,
+            source_delivery_id: formData.delivery_id,
+            note: "Overpayment - added to customer credit",
+          });
+        }
+
         try {
-          await NotificationService.sendPaymentNotification(paymentData.id);
-          console.log('Payment notification sent to admins successfully');
-        } catch (notifError) {
-          console.error('Failed to send payment notification:', notifError);
+          await NotificationService.sendPaymentNotification(paymentRow.id);
+        } catch (err) {
+          console.error("notification failed", err);
         }
 
-        toast({
-          title: "Payment created",
-          description: "Payment has been created successfully and notification sent to admins.",
-        });
+        toast({ title: "Payment recorded" });
       }
 
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       onOpenChange(false);
     } catch (error: any) {
-      console.error('Error saving payment:', error);
+      console.error("Error saving payment:", error);
       toast({
         title: "Error",
-        description: "Failed to save payment: " + error.message,
+        description: error.message || "Failed to save payment",
         variant: "destructive",
       });
     } finally {
@@ -248,16 +277,10 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     }
   };
 
-  // Get filtered deliveries for dropdown - show customer's unpaid deliveries OR the currently selected delivery
-  const filteredDeliveries = deliveries.filter(delivery => 
-    (delivery.customer_id === formData.customer_id && delivery.payment_status !== 'paid') || 
-    (editData && delivery.id === editData.delivery_id)
-  );
-
-  const selectedDelivery = allDeliveries.find(d => d.id === formData.delivery_id);
-  const statusInfo = formData.delivery_id && formData.amount 
-    ? getPaymentStatusInfo(formData.delivery_id, Number(formData.amount))
-    : null;
+  const remainingAfter =
+    selectedDelivery && formData.amount
+      ? Number(selectedDelivery.total_amount) - alreadyPaid - Number(formData.amount || 0)
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -265,19 +288,21 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         <DialogHeader>
           <DialogTitle>{editData ? "Edit Payment" : "Add Payment"}</DialogTitle>
         </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <Label htmlFor="customer">Customer *</Label>
-            <Select 
-              value={formData.customer_id} 
-              onValueChange={(value) => setFormData({...formData, customer_id: value, delivery_id: ""})}
+            <Select
+              value={formData.customer_id}
+              onValueChange={(value) =>
+                setFormData({ ...formData, customer_id: value, delivery_id: "", apply_credit: false })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select customer" />
               </SelectTrigger>
               <SelectContent>
-                {customers.map(customer => (
+                {customers.map((customer) => (
                   <SelectItem key={customer.id} value={customer.id}>
                     {customer.customer_name}
                   </SelectItem>
@@ -286,11 +311,28 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
             </Select>
           </div>
 
+          {formData.customer_id && creditBalance > 0 && (
+            <div className="p-2 rounded-md border border-violet-300 bg-violet-50 text-sm flex items-center justify-between">
+              <span className="text-violet-800 font-medium">
+                Credit available: KSh {creditBalance.toLocaleString()}
+              </span>
+              {!editData && (
+                <label className="flex items-center gap-2 text-violet-800">
+                  <Checkbox
+                    checked={formData.apply_credit}
+                    onCheckedChange={(v) => handleApplyCreditToggle(!!v)}
+                  />
+                  Apply credit
+                </label>
+              )}
+            </div>
+          )}
+
           <div>
             <Label htmlFor="delivery">Delivery *</Label>
-            <Select 
-              value={formData.delivery_id} 
-              onValueChange={(value) => setFormData({...formData, delivery_id: value})}
+            <Select
+              value={formData.delivery_id}
+              onValueChange={(value) => setFormData({ ...formData, delivery_id: value })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select delivery" />
@@ -298,24 +340,31 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               <SelectContent>
                 {filteredDeliveries.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground text-center">
-                    No unpaid deliveries found
+                    No deliveries with balance
                   </div>
                 ) : (
-                  filteredDeliveries.map(delivery => (
-                    <SelectItem key={delivery.id} value={delivery.id}>
-                      {delivery.delivery_date} - KSh {Number(delivery.total_amount).toLocaleString()}
-                    </SelectItem>
-                  ))
+                  filteredDeliveries.map((d) => {
+                    const paid = paidByDelivery[d.id] || 0;
+                    const rem = Number(d.total_amount) - paid;
+                    return (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.delivery_date} — Total KSh {Number(d.total_amount).toLocaleString()}, Balance KSh{" "}
+                        {rem.toLocaleString()}
+                      </SelectItem>
+                    );
+                  })
                 )}
               </SelectContent>
             </Select>
           </div>
 
           {selectedDelivery && (
-            <div className="p-3 bg-muted rounded-md text-sm">
-              <div className="font-medium">Delivery Amount: KSh {Number(selectedDelivery.total_amount).toLocaleString()}</div>
-              <div>Quantity: {selectedDelivery.qty}</div>
-              <div>Unit Rate: KSh {Number(selectedDelivery.unit_rate).toLocaleString()}</div>
+            <div className="p-2 bg-muted rounded-md text-xs space-y-0.5">
+              <div>Delivery Total: <b>KSh {Number(selectedDelivery.total_amount).toLocaleString()}</b></div>
+              <div>Already Paid: KSh {alreadyPaid.toLocaleString()}</div>
+              <div>
+                Remaining: <b>KSh {(Number(selectedDelivery.total_amount) - alreadyPaid).toLocaleString()}</b>
+              </div>
             </div>
           )}
 
@@ -325,7 +374,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               id="amount"
               type="number"
               value={formData.amount}
-              onChange={(e) => setFormData({...formData, amount: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
               placeholder="Enter payment amount"
               required
             />
@@ -333,9 +382,11 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
           <div>
             <Label htmlFor="paymentMethod">Payment Method</Label>
-            <Select 
-              value={formData.payment_method} 
-              onValueChange={(value) => setFormData({...formData, payment_method: value})}
+            <Select
+              value={formData.payment_method}
+              onValueChange={(value) =>
+                setFormData({ ...formData, payment_method: value, apply_credit: value === "credit" })
+              }
             >
               <SelectTrigger>
                 <SelectValue />
@@ -344,40 +395,50 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                 <SelectItem value="cash">Cash</SelectItem>
                 <SelectItem value="mpesa">M-Pesa</SelectItem>
                 <SelectItem value="bank">Bank Transfer</SelectItem>
+                {creditBalance > 0 && <SelectItem value="credit">Customer Credit</SelectItem>}
               </SelectContent>
             </Select>
           </div>
 
-          {formData.payment_method === 'mpesa' && (
+          {formData.payment_method === "mpesa" && (
             <div>
               <Label htmlFor="mpesaCode">M-Pesa Code</Label>
               <Input
                 id="mpesaCode"
                 value={formData.mpesa_code}
-                onChange={(e) => setFormData({...formData, mpesa_code: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, mpesa_code: e.target.value })}
                 placeholder="Enter M-Pesa code"
               />
             </div>
           )}
 
-          {/* Show calculated status */}
-          {statusInfo && (
-            <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-              <div className="font-medium text-blue-800">Payment Status:</div>
-              <div className="text-blue-700">{statusInfo.label}</div>
-              <div className="text-xs text-blue-600 mt-1">
-                Delivery: KSh {selectedDelivery?.total_amount?.toLocaleString() || 0} | 
-                Payment: KSh {Number(formData.amount).toLocaleString()}
-              </div>
+          {selectedDelivery && formData.amount && remainingAfter !== null && (
+            <div className="p-2 rounded-md border flex items-center gap-2 text-xs">
+              <StatusBadge
+                status={
+                  remainingAfter <= 0
+                    ? remainingAfter < 0
+                      ? "credit"
+                      : "paid"
+                    : "partial"
+                }
+              />
+              <span>
+                {remainingAfter > 0
+                  ? `Balance after: KSh ${remainingAfter.toLocaleString()}`
+                  : remainingAfter === 0
+                  ? "Delivery fully paid"
+                  : `Overpayment credit: KSh ${Math.abs(remainingAfter).toLocaleString()}`}
+              </span>
             </div>
           )}
 
-          <div className="flex justify-end space-x-2 pt-4">
+          <div className="flex justify-end space-x-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : editData ? "Update" : "Create"}
+              {loading ? "Saving..." : editData ? "Update" : "Add Payment"}
             </Button>
           </div>
         </form>
