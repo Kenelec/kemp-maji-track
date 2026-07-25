@@ -378,7 +378,6 @@ export function PaymentsSection() {
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Use only status values that are allowed by the constraint
-      // From your constraints, the allowed statuses are probably in the check constraint
       const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed', 'credit'];
       
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
