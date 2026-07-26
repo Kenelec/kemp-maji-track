@@ -1161,7 +1161,24 @@ export function DeliveriesSection() {
                             >
                               {Number(delivery.total_amount).toLocaleString()}
                             </TableCell>
+                            <TableCell
+                              className="text-xs py-1 px-2 text-center align-middle"
+                              style={{ width: `${columnWidths.payments}px` }}
+                            >
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs w-full"
+                                onClick={() => setPaymentsDialogDelivery(delivery)}
+                              >
+                                <Wallet className="w-3 h-3 mr-1" />
+                                {(delivery as any)._payments_count > 0
+                                  ? `${(delivery as any)._payments_count} · KSh ${Number((delivery as any)._payments_paid || 0).toLocaleString()}`
+                                  : "Add"}
+                              </Button>
+                            </TableCell>
                             <TableCell 
+
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.status}px` }}
                             >
