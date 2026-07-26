@@ -1492,6 +1492,13 @@ export function DeliveriesSection() {
         type="deliveries"
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["deliveries"] })}
       />
+
+      <DeliveryPaymentsDialog
+        open={!!paymentsDialogDelivery}
+        onOpenChange={(o) => !o && setPaymentsDialogDelivery(null)}
+        delivery={paymentsDialogDelivery}
+      />
+
     </div>
   );
 }
