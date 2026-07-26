@@ -358,7 +358,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               <span className="text-violet-800 font-medium">
                 Credit available: KSh {creditBalance.toLocaleString()}
               </span>
-              {!editData && (
+              {!editData?.id && (
                 <label className="flex items-center gap-2 text-violet-800">
                   <Checkbox
                     checked={formData.apply_credit}
