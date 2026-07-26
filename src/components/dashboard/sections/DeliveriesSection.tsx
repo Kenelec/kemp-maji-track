@@ -309,8 +309,10 @@ export function DeliveriesSection() {
     qty: 80,
     rate: 100,
     total: 100,
+    payments: 110,
     status: 100,
     actions: 120
+
   });
 
   // NEW: Resizing state
