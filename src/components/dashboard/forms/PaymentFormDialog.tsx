@@ -328,7 +328,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editData ? "Edit Payment" : "Add Payment"}</DialogTitle>
+          <DialogTitle>{editData?.id ? "Edit Payment" : "Add Payment"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
