@@ -58,7 +58,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   }, [open]);
 
   useEffect(() => {
-    if (open && dataLoaded && editData) {
+    if (open && dataLoaded && editData?.id) {
       setFormData({
         customer_id: editData.customer_id || "",
         delivery_id: editData.delivery_id || "",
@@ -67,10 +67,19 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         mpesa_code: editData.mpesa_code || "",
         apply_credit: false,
       });
-    } else if (open && !editData) {
+    } else if (open && dataLoaded && !editData?.id) {
       resetForm();
+      // Preselect customer/delivery when opened from a delivery context
+      if (editData?.customer_id || editData?.delivery_id) {
+        setFormData((f) => ({
+          ...f,
+          customer_id: editData.customer_id || "",
+          delivery_id: editData.delivery_id || "",
+        }));
+      }
     }
   }, [open, dataLoaded, editData]);
+
 
   // Refresh credit balance when customer changes
   useEffect(() => {
