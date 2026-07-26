@@ -193,14 +193,16 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
       const today = new Date().toISOString().split("T")[0];
 
+      const isEdit = !!editData?.id;
+
       // Applied credit path (only when not editing an existing row)
-      if (formData.apply_credit && !editData) {
+      if (formData.apply_credit && !isEdit) {
         if (paymentAmount > creditBalance + 0.0001) {
           throw new Error(`Only KSh ${creditBalance.toLocaleString()} credit available`);
         }
       }
 
-      if (editData) {
+      if (isEdit) {
         // Update the specific existing payment row only
         const { error } = await supabase
           .from("payments")
@@ -216,6 +218,36 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           })
           .eq("id", editData.id);
         if (error) throw error;
+
+        // Reconcile credit ledger for this payment: recompute overpayment
+        // vs delivery total after this edit.
+        // 1) Remove any prior credit rows tied to this payment (positive overpayment rows).
+        await supabase
+          .from("customer_credits")
+          .delete()
+          .eq("source_payment_id", editData.id)
+          .gt("amount", 0);
+
+        // 2) If there's still an overpayment, insert a fresh credit row.
+        const { data: paidRows } = await supabase
+          .from("payments")
+          .select("amount, status")
+          .eq("delivery_id", formData.delivery_id)
+          .in("status", ["paid", "completed"]);
+        const totalPaid = (paidRows || []).reduce(
+          (s: number, r: any) => s + Number(r.amount || 0),
+          0,
+        );
+        const overpay = totalPaid - Number(selectedDelivery.total_amount);
+        if (overpay > 0.0001) {
+          await supabase.from("customer_credits").insert({
+            customer_id: formData.customer_id,
+            amount: overpay,
+            source_payment_id: editData.id,
+            source_delivery_id: formData.delivery_id,
+            note: "Overpayment (edited) - added to customer credit",
+          });
+        }
 
         toast({ title: "Payment updated" });
       } else {
@@ -270,6 +302,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
         toast({ title: "Payment recorded" });
       }
+
 
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
