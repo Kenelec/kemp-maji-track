@@ -1020,7 +1020,25 @@ export function DeliveriesSection() {
                           </div>
                         </TableHead>
                         
+                        {/* Payments Column */}
+                        <TableHead
+                          className="text-xs py-1 px-2 text-center"
+                          style={{ width: `${columnWidths.payments}px` }}
+                        >
+                          <div className="flex items-center justify-between w-full h-full">
+                            <span className="flex-1 text-left">Payments</span>
+                            <div
+                              className="resize-handle w-2 h-full bg-transparent hover:bg-blue-200 cursor-col-resize flex items-center justify-center"
+                              onMouseDown={(e) => handleResizeStart('payments', e)}
+                              style={{ cursor: 'col-resize' }}
+                            >
+                              <div className="w-px h-full bg-gray-300 hover:bg-blue-500"></div>
+                            </div>
+                          </div>
+                        </TableHead>
+
                         {/* Status Column */}
+
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.status}px` }}
