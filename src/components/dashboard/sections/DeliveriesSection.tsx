@@ -35,6 +35,8 @@ export function DeliveriesSection() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deliveryToDelete, setDeliveryToDelete] = useState<string | null>(null);
   const [hasLinkedPayments, setHasLinkedPayments] = useState(false);
+  const [paymentsDialogDelivery, setPaymentsDialogDelivery] = useState<any | null>(null);
+
   
   // NEW: Form state for editing
   const [formData, setFormData] = useState({
