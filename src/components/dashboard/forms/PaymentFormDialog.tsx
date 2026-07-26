@@ -157,7 +157,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   const filteredDeliveries = useMemo(() => {
     return allDeliveries.filter((d) => {
       if (d.customer_id !== formData.customer_id) return false;
-      if (editData && d.id === editData.delivery_id) return true;
+      if (editData?.id && d.id === editData.delivery_id) return true;
       const paid = paidByDelivery[d.id] || 0;
       return Number(d.total_amount) - paid > 0.0001;
     });
