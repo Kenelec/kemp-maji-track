@@ -480,7 +480,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : editData ? "Update" : "Add Payment"}
+              {loading ? "Saving..." : editData?.id ? "Update" : "Add Payment"}
             </Button>
           </div>
         </form>
