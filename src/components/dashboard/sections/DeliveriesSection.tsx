@@ -347,10 +347,36 @@ export function DeliveriesSection() {
         .order("delivery_date", { ascending: false });
       
       if (error) throw error;
-      return data;
+
+      // Fetch payment aggregates per delivery
+      const ids = (data || []).map((d: any) => d.id);
+      let paymentAgg: Record<string, { count: number; paid: number }> = {};
+      if (ids.length > 0) {
+        const { data: pays } = await supabase
+          .from("payments")
+          .select("delivery_id, amount, status")
+          .in("delivery_id", ids)
+          .gt("amount", 0);
+        (pays || []).forEach((p: any) => {
+          if (!p.delivery_id) return;
+          const agg = paymentAgg[p.delivery_id] || { count: 0, paid: 0 };
+          agg.count += 1;
+          if (["paid", "completed"].includes(p.status)) {
+            agg.paid += Number(p.amount || 0);
+          }
+          paymentAgg[p.delivery_id] = agg;
+        });
+      }
+
+      return (data || []).map((d: any) => ({
+        ...d,
+        _payments_count: paymentAgg[d.id]?.count || 0,
+        _payments_paid: paymentAgg[d.id]?.paid || 0,
+      }));
     },
     refetchInterval: 5000,
   });
+
 
   // NEW: Client-side sorting with proper numeric handling
   const sortedDeliveries = useMemo(() => {
