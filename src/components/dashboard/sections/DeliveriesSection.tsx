@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle, CreditCard, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, CheckCircle, Clock, AlertCircle, CreditCard, ChevronLeft, ChevronRight, X, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import { NotificationService } from "@/services/notificationService";
+import { DeliveryPaymentsDialog } from "./DeliveryPaymentsDialog";
 import { format, startOfMonth, endOfMonth, subMonths, addMonths, format as formatDate } from "date-fns";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +35,8 @@ export function DeliveriesSection() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deliveryToDelete, setDeliveryToDelete] = useState<string | null>(null);
   const [hasLinkedPayments, setHasLinkedPayments] = useState(false);
+  const [paymentsDialogDelivery, setPaymentsDialogDelivery] = useState<any | null>(null);
+
   
   // NEW: Form state for editing
   const [formData, setFormData] = useState({
@@ -305,8 +309,10 @@ export function DeliveriesSection() {
     qty: 80,
     rate: 100,
     total: 100,
+    payments: 110,
     status: 100,
     actions: 120
+
   });
 
   // NEW: Resizing state
@@ -341,10 +347,36 @@ export function DeliveriesSection() {
         .order("delivery_date", { ascending: false });
       
       if (error) throw error;
-      return data;
+
+      // Fetch payment aggregates per delivery
+      const ids = (data || []).map((d: any) => d.id);
+      let paymentAgg: Record<string, { count: number; paid: number }> = {};
+      if (ids.length > 0) {
+        const { data: pays } = await supabase
+          .from("payments")
+          .select("delivery_id, amount, status")
+          .in("delivery_id", ids)
+          .gt("amount", 0);
+        (pays || []).forEach((p: any) => {
+          if (!p.delivery_id) return;
+          const agg = paymentAgg[p.delivery_id] || { count: 0, paid: 0 };
+          agg.count += 1;
+          if (["paid", "completed"].includes(p.status)) {
+            agg.paid += Number(p.amount || 0);
+          }
+          paymentAgg[p.delivery_id] = agg;
+        });
+      }
+
+      return (data || []).map((d: any) => ({
+        ...d,
+        _payments_count: paymentAgg[d.id]?.count || 0,
+        _payments_paid: paymentAgg[d.id]?.paid || 0,
+      }));
     },
     refetchInterval: 5000,
   });
+
 
   // NEW: Client-side sorting with proper numeric handling
   const sortedDeliveries = useMemo(() => {
@@ -988,7 +1020,25 @@ export function DeliveriesSection() {
                           </div>
                         </TableHead>
                         
+                        {/* Payments Column */}
+                        <TableHead
+                          className="text-xs py-1 px-2 text-center"
+                          style={{ width: `${columnWidths.payments}px` }}
+                        >
+                          <div className="flex items-center justify-between w-full h-full">
+                            <span className="flex-1 text-left">Payments</span>
+                            <div
+                              className="resize-handle w-2 h-full bg-transparent hover:bg-blue-200 cursor-col-resize flex items-center justify-center"
+                              onMouseDown={(e) => handleResizeStart('payments', e)}
+                              style={{ cursor: 'col-resize' }}
+                            >
+                              <div className="w-px h-full bg-gray-300 hover:bg-blue-500"></div>
+                            </div>
+                          </div>
+                        </TableHead>
+
                         {/* Status Column */}
+
                         <TableHead 
                           className="cursor-pointer hover:bg-gray-100 text-xs py-1 px-2 text-center"
                           style={{ width: `${columnWidths.status}px` }}
@@ -1111,7 +1161,24 @@ export function DeliveriesSection() {
                             >
                               {Number(delivery.total_amount).toLocaleString()}
                             </TableCell>
+                            <TableCell
+                              className="text-xs py-1 px-2 text-center align-middle"
+                              style={{ width: `${columnWidths.payments}px` }}
+                            >
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs w-full"
+                                onClick={() => setPaymentsDialogDelivery(delivery)}
+                              >
+                                <Wallet className="w-3 h-3 mr-1" />
+                                {(delivery as any)._payments_count > 0
+                                  ? `${(delivery as any)._payments_count} · KSh ${Number((delivery as any)._payments_paid || 0).toLocaleString()}`
+                                  : "Add"}
+                              </Button>
+                            </TableCell>
                             <TableCell 
+
                               className="text-xs py-1 px-2 text-center align-middle"
                               style={{ width: `${columnWidths.status}px` }}
                             >
@@ -1425,6 +1492,13 @@ export function DeliveriesSection() {
         type="deliveries"
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["deliveries"] })}
       />
+
+      <DeliveryPaymentsDialog
+        open={!!paymentsDialogDelivery}
+        onOpenChange={(o) => !o && setPaymentsDialogDelivery(null)}
+        delivery={paymentsDialogDelivery}
+      />
+
     </div>
   );
 }

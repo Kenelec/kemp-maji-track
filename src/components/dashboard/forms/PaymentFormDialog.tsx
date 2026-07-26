@@ -58,7 +58,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   }, [open]);
 
   useEffect(() => {
-    if (open && dataLoaded && editData) {
+    if (open && dataLoaded && editData?.id) {
       setFormData({
         customer_id: editData.customer_id || "",
         delivery_id: editData.delivery_id || "",
@@ -67,10 +67,19 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         mpesa_code: editData.mpesa_code || "",
         apply_credit: false,
       });
-    } else if (open && !editData) {
+    } else if (open && dataLoaded && !editData?.id) {
       resetForm();
+      // Preselect customer/delivery when opened from a delivery context
+      if (editData?.customer_id || editData?.delivery_id) {
+        setFormData((f) => ({
+          ...f,
+          customer_id: editData.customer_id || "",
+          delivery_id: editData.delivery_id || "",
+        }));
+      }
     }
   }, [open, dataLoaded, editData]);
+
 
   // Refresh credit balance when customer changes
   useEffect(() => {
@@ -148,7 +157,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   const filteredDeliveries = useMemo(() => {
     return allDeliveries.filter((d) => {
       if (d.customer_id !== formData.customer_id) return false;
-      if (editData && d.id === editData.delivery_id) return true;
+      if (editData?.id && d.id === editData.delivery_id) return true;
       const paid = paidByDelivery[d.id] || 0;
       return Number(d.total_amount) - paid > 0.0001;
     });
@@ -184,14 +193,16 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
       const today = new Date().toISOString().split("T")[0];
 
+      const isEdit = !!editData?.id;
+
       // Applied credit path (only when not editing an existing row)
-      if (formData.apply_credit && !editData) {
+      if (formData.apply_credit && !isEdit) {
         if (paymentAmount > creditBalance + 0.0001) {
           throw new Error(`Only KSh ${creditBalance.toLocaleString()} credit available`);
         }
       }
 
-      if (editData) {
+      if (isEdit) {
         // Update the specific existing payment row only
         const { error } = await supabase
           .from("payments")
@@ -207,6 +218,36 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           })
           .eq("id", editData.id);
         if (error) throw error;
+
+        // Reconcile credit ledger for this payment: recompute overpayment
+        // vs delivery total after this edit.
+        // 1) Remove any prior credit rows tied to this payment (positive overpayment rows).
+        await supabase
+          .from("customer_credits")
+          .delete()
+          .eq("source_payment_id", editData.id)
+          .gt("amount", 0);
+
+        // 2) If there's still an overpayment, insert a fresh credit row.
+        const { data: paidRows } = await supabase
+          .from("payments")
+          .select("amount, status")
+          .eq("delivery_id", formData.delivery_id)
+          .in("status", ["paid", "completed"]);
+        const totalPaid = (paidRows || []).reduce(
+          (s: number, r: any) => s + Number(r.amount || 0),
+          0,
+        );
+        const overpay = totalPaid - Number(selectedDelivery.total_amount);
+        if (overpay > 0.0001) {
+          await supabase.from("customer_credits").insert({
+            customer_id: formData.customer_id,
+            amount: overpay,
+            source_payment_id: editData.id,
+            source_delivery_id: formData.delivery_id,
+            note: "Overpayment (edited) - added to customer credit",
+          });
+        }
 
         toast({ title: "Payment updated" });
       } else {
@@ -262,6 +303,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         toast({ title: "Payment recorded" });
       }
 
+
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
       onOpenChange(false);
@@ -286,7 +328,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editData ? "Edit Payment" : "Add Payment"}</DialogTitle>
+          <DialogTitle>{editData?.id ? "Edit Payment" : "Add Payment"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -316,7 +358,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               <span className="text-violet-800 font-medium">
                 Credit available: KSh {creditBalance.toLocaleString()}
               </span>
-              {!editData && (
+              {!editData?.id && (
                 <label className="flex items-center gap-2 text-violet-800">
                   <Checkbox
                     checked={formData.apply_credit}
@@ -438,7 +480,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : editData ? "Update" : "Add Payment"}
+              {loading ? "Saving..." : editData?.id ? "Update" : "Add Payment"}
             </Button>
           </div>
         </form>
