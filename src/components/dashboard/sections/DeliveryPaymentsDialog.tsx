@@ -51,9 +51,10 @@ export function DeliveryPaymentsDialog({ open, onOpenChange, delivery }: Props) 
 
     if (delivery.customer_id) {
       const { data: credits } = await supabase
-        .from("customer_credits")
+        .from("payments")
         .select("amount")
-        .eq("customer_id", delivery.customer_id);
+        .eq("customer_id", delivery.customer_id)
+        .eq("status", "credit");
       const bal = (credits || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
       setCreditBalance(bal);
     }
@@ -69,8 +70,12 @@ export function DeliveryPaymentsDialog({ open, onOpenChange, delivery }: Props) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, delivery?.id]);
 
+  // Hide credit rows from the payment list (they're a balance ledger, not a delivery payment)
   const validPayments = payments.filter(
-    (p) => Number(p.amount || 0) > 0 && ["paid", "completed", "pending_verification"].includes(p.status),
+    (p) =>
+      p.status !== "credit" &&
+      Number(p.amount || 0) > 0 &&
+      ["paid", "completed", "pending_verification"].includes(p.status),
   );
   const totalPaid = validPayments
     .filter((p) => ["paid", "completed"].includes(p.status))
@@ -80,8 +85,12 @@ export function DeliveryPaymentsDialog({ open, onOpenChange, delivery }: Props) 
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
-      // Remove any credit ledger rows tied to this payment first
-      await supabase.from("customer_credits").delete().eq("source_payment_id", deleteId);
+      // Remove any credit rows tied to this payment (overpayment credit + credit usage rows)
+      await supabase
+        .from("payments")
+        .delete()
+        .eq("status", "credit")
+        .or(`mpesa_code.eq.OVERPAY:${deleteId},mpesa_code.eq.USE:${deleteId}`);
       const { error } = await supabase.from("payments").delete().eq("id", deleteId);
       if (error) throw error;
       toast({ title: "Payment deleted" });
@@ -184,18 +193,20 @@ export function DeliveryPaymentsDialog({ open, onOpenChange, delivery }: Props) 
                         {isMasterAdmin && (
                           <div className="flex justify-end gap-1">
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
+                              title="Edit this payment (modifies the amount)"
                               onClick={() => {
                                 setEditingPayment(p);
                                 setPaymentFormOpen(true);
                               }}
                             >
-                              <Pencil className="w-3 h-3" />
+                              <Pencil className="w-3 h-3 mr-1" /> Edit
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
+                              title="Delete this payment"
                               onClick={() => setDeleteId(p.id)}
                             >
                               <Trash2 className="w-3 h-3" />

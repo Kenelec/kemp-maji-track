@@ -356,6 +356,7 @@ export function DeliveriesSection() {
           .from("payments")
           .select("delivery_id, amount, status")
           .in("delivery_id", ids)
+          .neq("status", "credit")
           .gt("amount", 0);
         (pays || []).forEach((p: any) => {
           if (!p.delivery_id) return;
@@ -741,6 +742,8 @@ export function DeliveriesSection() {
       .from("payments")
       .select("id")
       .eq("delivery_id", id)
+      .neq("status", "credit")
+      .gt("amount", 0)
       .limit(1);
     
     setHasLinkedPayments(linkedPayments && linkedPayments.length > 0);
