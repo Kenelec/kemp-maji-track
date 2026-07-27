@@ -193,18 +193,20 @@ export function DeliveryPaymentsDialog({ open, onOpenChange, delivery }: Props) 
                         {isMasterAdmin && (
                           <div className="flex justify-end gap-1">
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
+                              title="Edit this payment (modifies the amount)"
                               onClick={() => {
                                 setEditingPayment(p);
                                 setPaymentFormOpen(true);
                               }}
                             >
-                              <Pencil className="w-3 h-3" />
+                              <Pencil className="w-3 h-3 mr-1" /> Edit
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
+                              title="Delete this payment"
                               onClick={() => setDeleteId(p.id)}
                             >
                               <Trash2 className="w-3 h-3" />
