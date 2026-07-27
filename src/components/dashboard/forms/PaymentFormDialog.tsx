@@ -50,6 +50,8 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
+  const isEdit = !!editData?.id;
+
   useEffect(() => {
     if (open) {
       setDataLoaded(false);
@@ -58,7 +60,8 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
   }, [open]);
 
   useEffect(() => {
-    if (open && dataLoaded && editData?.id) {
+    if (!open || !dataLoaded) return;
+    if (isEdit) {
       setFormData({
         customer_id: editData.customer_id || "",
         delivery_id: editData.delivery_id || "",
@@ -67,9 +70,8 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         mpesa_code: editData.mpesa_code || "",
         apply_credit: false,
       });
-    } else if (open && dataLoaded && !editData?.id) {
+    } else {
       resetForm();
-      // Preselect customer/delivery when opened from a delivery context
       if (editData?.customer_id || editData?.delivery_id) {
         setFormData((f) => ({
           ...f,
@@ -78,8 +80,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         }));
       }
     }
-  }, [open, dataLoaded, editData]);
-
+  }, [open, dataLoaded, editData, isEdit]);
 
   // Refresh credit balance when customer changes
   useEffect(() => {
@@ -102,7 +103,6 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
         .select("id, delivery_date, total_amount, qty, unit_rate, customer_id, payment_status")
         .order("delivery_date", { ascending: false });
 
-      // Sum successful payments per delivery to compute remaining balances
       const { data: paymentsData } = await supabase
         .from("payments")
         .select("delivery_id, amount, status")
@@ -122,11 +122,13 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     }
   };
 
+  // Credit balance = SUM(amount) of payments where status='credit'
   const fetchCreditBalance = async (customerId: string) => {
     const { data, error } = await supabase
-      .from("customer_credits")
+      .from("payments")
       .select("amount")
-      .eq("customer_id", customerId);
+      .eq("customer_id", customerId)
+      .eq("status", "credit");
     if (error) {
       console.error("credit fetch error", error);
       setCreditBalance(0);
@@ -149,23 +151,25 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
   const selectedDelivery = allDeliveries.find((d) => d.id === formData.delivery_id);
   const alreadyPaid = selectedDelivery ? paidByDelivery[selectedDelivery.id] || 0 : 0;
+  // In edit mode, "already paid" excludes the row being edited so the balance math is honest
+  const alreadyPaidExcludingSelf = isEdit
+    ? Math.max(0, alreadyPaid - Number(editData?.amount || 0))
+    : alreadyPaid;
   const remaining = selectedDelivery
-    ? Math.max(0, Number(selectedDelivery.total_amount) - alreadyPaid - (editData ? 0 : 0))
+    ? Math.max(0, Number(selectedDelivery.total_amount) - alreadyPaidExcludingSelf)
     : 0;
 
-  // Deliveries available for the selected customer with remaining balance > 0
   const filteredDeliveries = useMemo(() => {
     return allDeliveries.filter((d) => {
       if (d.customer_id !== formData.customer_id) return false;
-      if (editData?.id && d.id === editData.delivery_id) return true;
+      if (isEdit && d.id === editData.delivery_id) return true;
       const paid = paidByDelivery[d.id] || 0;
       return Number(d.total_amount) - paid > 0.0001;
     });
-  }, [allDeliveries, paidByDelivery, formData.customer_id, editData]);
+  }, [allDeliveries, paidByDelivery, formData.customer_id, editData, isEdit]);
 
   const handleApplyCreditToggle = (checked: boolean) => {
     if (checked && selectedDelivery) {
-      // Prefill amount with min(remaining, creditBalance)
       const auto = Math.min(remaining || 0, creditBalance);
       setFormData((f) => ({
         ...f,
@@ -182,6 +186,48 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
     }
   };
 
+  // After any add/edit, ensure a single overpayment credit row exists for that source payment
+  const reconcileOverpayment = async (paymentId: string, deliveryId: string, customerId: string) => {
+    const { data: delivery } = await supabase
+      .from("deliveries")
+      .select("total_amount")
+      .eq("id", deliveryId)
+      .single();
+    const total = Number(delivery?.total_amount || 0);
+
+    const { data: paidRows } = await supabase
+      .from("payments")
+      .select("amount")
+      .eq("delivery_id", deliveryId)
+      .in("status", ["paid", "completed"]);
+    const totalPaid = (paidRows || []).reduce((s, r: any) => s + Number(r.amount || 0), 0);
+
+    // Remove any existing overpayment-credit row tied to THIS payment (delivery_id + customer + status=credit + note=overpayment)
+    await supabase
+      .from("payments")
+      .delete()
+      .eq("status", "credit")
+      .eq("delivery_id", deliveryId)
+      .eq("customer_id", customerId)
+      .eq("payment_method", "credit")
+      .gt("amount", 0)
+      .like("mpesa_code", `OVERPAY:${paymentId}%`);
+
+    const overpay = totalPaid - total;
+    if (overpay > 0.0001) {
+      const today = new Date().toISOString().split("T")[0];
+      await supabase.from("payments").insert({
+        customer_id: customerId,
+        delivery_id: deliveryId,
+        amount: overpay,
+        due_date: today,
+        payment_method: "credit",
+        status: "credit",
+        mpesa_code: `OVERPAY:${paymentId}`,
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -190,12 +236,10 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       const paymentAmount = Number(formData.amount);
       if (!paymentAmount || paymentAmount <= 0) throw new Error("Enter a valid amount");
       if (!selectedDelivery) throw new Error("Select a delivery");
+      if (isEdit && !editData?.id) throw new Error("Missing payment id for edit");
 
       const today = new Date().toISOString().split("T")[0];
 
-      const isEdit = !!editData?.id;
-
-      // Applied credit path (only when not editing an existing row)
       if (formData.apply_credit && !isEdit) {
         if (paymentAmount > creditBalance + 0.0001) {
           throw new Error(`Only KSh ${creditBalance.toLocaleString()} credit available`);
@@ -203,7 +247,6 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
       }
 
       if (isEdit) {
-        // Update the specific existing payment row only
         const { error } = await supabase
           .from("payments")
           .update({
@@ -219,39 +262,9 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           .eq("id", editData.id);
         if (error) throw error;
 
-        // Reconcile credit ledger for this payment: recompute overpayment
-        // vs delivery total after this edit.
-        // 1) Remove any prior credit rows tied to this payment (positive overpayment rows).
-        await supabase
-          .from("customer_credits")
-          .delete()
-          .eq("source_payment_id", editData.id)
-          .gt("amount", 0);
-
-        // 2) If there's still an overpayment, insert a fresh credit row.
-        const { data: paidRows } = await supabase
-          .from("payments")
-          .select("amount, status")
-          .eq("delivery_id", formData.delivery_id)
-          .in("status", ["paid", "completed"]);
-        const totalPaid = (paidRows || []).reduce(
-          (s: number, r: any) => s + Number(r.amount || 0),
-          0,
-        );
-        const overpay = totalPaid - Number(selectedDelivery.total_amount);
-        if (overpay > 0.0001) {
-          await supabase.from("customer_credits").insert({
-            customer_id: formData.customer_id,
-            amount: overpay,
-            source_payment_id: editData.id,
-            source_delivery_id: formData.delivery_id,
-            note: "Overpayment (edited) - added to customer credit",
-          });
-        }
-
+        await reconcileOverpayment(editData.id, formData.delivery_id, formData.customer_id);
         toast({ title: "Payment updated" });
       } else {
-        // Always create a NEW row per payment (additive)
         const { data: paymentRow, error } = await supabase
           .from("payments")
           .insert([
@@ -270,29 +283,20 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           .single();
         if (error) throw error;
 
-        // If credit was applied, deduct from customer_credits ledger
+        // If credit was applied, deduct from credit balance by inserting a negative credit row
         if (formData.apply_credit) {
-          await supabase.from("customer_credits").insert({
+          await supabase.from("payments").insert({
             customer_id: formData.customer_id,
+            delivery_id: formData.delivery_id,
             amount: -paymentAmount,
-            source_payment_id: paymentRow.id,
-            source_delivery_id: formData.delivery_id,
-            note: "Credit applied to delivery payment",
+            due_date: today,
+            payment_method: "credit",
+            status: "credit",
+            mpesa_code: `USE:${paymentRow.id}`,
           });
         }
 
-        // If overpaid vs remaining, park excess as credit
-        const totalNowPaid = alreadyPaid + paymentAmount;
-        const overpay = totalNowPaid - Number(selectedDelivery.total_amount);
-        if (overpay > 0.0001) {
-          await supabase.from("customer_credits").insert({
-            customer_id: formData.customer_id,
-            amount: overpay,
-            source_payment_id: paymentRow.id,
-            source_delivery_id: formData.delivery_id,
-            note: "Overpayment - added to customer credit",
-          });
-        }
+        await reconcileOverpayment(paymentRow.id, formData.delivery_id, formData.customer_id);
 
         try {
           await NotificationService.sendPaymentNotification(paymentRow.id);
@@ -302,7 +306,6 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
         toast({ title: "Payment recorded" });
       }
-
 
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
@@ -321,14 +324,14 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
 
   const remainingAfter =
     selectedDelivery && formData.amount
-      ? Number(selectedDelivery.total_amount) - alreadyPaid - Number(formData.amount || 0)
+      ? Number(selectedDelivery.total_amount) - alreadyPaidExcludingSelf - Number(formData.amount || 0)
       : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editData?.id ? "Edit Payment" : "Add Payment"}</DialogTitle>
+          <DialogTitle>{isEdit ? `Edit Payment` : "Add Payment"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -339,6 +342,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               onValueChange={(value) =>
                 setFormData({ ...formData, customer_id: value, delivery_id: "", apply_credit: false })
               }
+              disabled={isEdit}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select customer" />
@@ -356,15 +360,15 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           {formData.customer_id && creditBalance > 0 && (
             <div className="p-2 rounded-md border border-violet-300 bg-violet-50 text-sm flex items-center justify-between">
               <span className="text-violet-800 font-medium">
-                Credit available: KSh {creditBalance.toLocaleString()}
+                Available Credit: KSh {creditBalance.toLocaleString()}
               </span>
-              {!editData?.id && (
+              {!isEdit && (
                 <label className="flex items-center gap-2 text-violet-800">
                   <Checkbox
                     checked={formData.apply_credit}
                     onCheckedChange={(v) => handleApplyCreditToggle(!!v)}
                   />
-                  Apply credit
+                  Use Credit
                 </label>
               )}
             </div>
@@ -375,6 +379,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
             <Select
               value={formData.delivery_id}
               onValueChange={(value) => setFormData({ ...formData, delivery_id: value })}
+              disabled={isEdit}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select delivery" />
@@ -403,15 +408,20 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
           {selectedDelivery && (
             <div className="p-2 bg-muted rounded-md text-xs space-y-0.5">
               <div>Delivery Total: <b>KSh {Number(selectedDelivery.total_amount).toLocaleString()}</b></div>
-              <div>Already Paid: KSh {alreadyPaid.toLocaleString()}</div>
               <div>
-                Remaining: <b>KSh {(Number(selectedDelivery.total_amount) - alreadyPaid).toLocaleString()}</b>
+                Current Amount Paid: KSh {alreadyPaidExcludingSelf.toLocaleString()}
+                {isEdit && (
+                  <span className="text-muted-foreground"> (excludes this record)</span>
+                )}
+              </div>
+              <div>
+                Balance: <b>KSh {(Number(selectedDelivery.total_amount) - alreadyPaidExcludingSelf).toLocaleString()}</b>
               </div>
             </div>
           )}
 
           <div>
-            <Label htmlFor="amount">Amount *</Label>
+            <Label htmlFor="amount">{isEdit ? "New Amount *" : "Amount to Add *"}</Label>
             <Input
               id="amount"
               type="number"
@@ -437,7 +447,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
                 <SelectItem value="cash">Cash</SelectItem>
                 <SelectItem value="mpesa">M-Pesa</SelectItem>
                 <SelectItem value="bank">Bank Transfer</SelectItem>
-                {creditBalance > 0 && <SelectItem value="credit">Customer Credit</SelectItem>}
+                {!isEdit && creditBalance > 0 && <SelectItem value="credit">Customer Credit</SelectItem>}
               </SelectContent>
             </Select>
           </div>
@@ -480,7 +490,7 @@ export function PaymentFormDialog({ open, onOpenChange, editData }: PaymentFormD
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : editData?.id ? "Update" : "Add Payment"}
+              {loading ? "Saving..." : isEdit ? "Update Payment" : "Add Payment"}
             </Button>
           </div>
         </form>
