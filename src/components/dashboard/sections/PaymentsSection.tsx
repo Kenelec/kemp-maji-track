@@ -26,24 +26,36 @@ export function PaymentsSection() {
   const { userRole } = useAuth();
   const isMasterAdmin = userRole === 'MasterAdmin';
   const queryClient = useQueryClient();
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<any>(null);
+  const [addingPayment, setAddingPayment] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   const [showPaymentHistory, setShowPaymentHistory] = useState<{deliveryId: string, payments: any[]} | null>(null); // NEW: State for payment history
   
   // NEW: Form state for editing
-  const [formData, setFormData] = useState({
+  const [editFormData, setEditFormData] = useState({
     id: '',
     customer_id: '',
     delivery_id: '',
-    existing_paid_amount: 0, // NEW: Current total paid for this delivery
-    new_payment_amount: 0, // NEW: Amount to add
-    credit_available: 0, // NEW: Available credit
-    use_credit: false, // NEW: Whether to use credit
+    amount: 0, // Current amount to edit
     payment_method: 'cash',
-    mpesa_code: ''
+    mpesa_code: '',
+    status: 'pending'
+  });
+
+  // NEW: Form state for adding
+  const [addFormData, setAddFormData] = useState({
+    customer_id: '',
+    delivery_id: '',
+    amount: 0, // NEW amount to add
+    credit_available: 0, // Available credit for customer
+    use_credit: false, // Whether to use credit
+    payment_method: 'cash',
+    mpesa_code: '',
+    status: 'pending'
   });
 
   // NEW: Loading states for dependent data
@@ -137,36 +149,48 @@ export function PaymentsSection() {
     return customerCredits[customerId] || 0;
   };
 
-  // NEW: Handle form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  // NEW: Handle edit form input changes
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
     
-    setFormData(prev => ({
+    setEditFormData(prev => ({
       ...prev,
-      [name]: name === 'existing_paid_amount' || name === 'new_payment_amount' || name === 'credit_available' ? Number(val) : val
+      [name]: name === 'amount' ? Number(val) : val
     }));
   };
 
-  // NEW: Handle delivery change to update existing paid amount
-  const handleDeliveryChange = (deliveryId: string) => {
-    const totalPaid = calculateTotalPaid(deliveryId);
+  // NEW: Handle add form input changes
+  const handleAddInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
     
-    setFormData(prev => ({
+    setAddFormData(prev => ({
       ...prev,
-      delivery_id: deliveryId,
-      existing_paid_amount: totalPaid,
-      credit_available: getCustomerCredit(prev.customer_id)
+      [name]: name === 'amount' || name === 'credit_available' ? Number(val) : val
     }));
   };
 
-  // NEW: Handle customer change to update credit
-  const handleCustomerChange = (customerId: string) => {
-    const credit = getCustomerCredit(customerId);
-    setFormData(prev => ({
+  // NEW: Handle delivery change in add form to update credit
+  const handleAddDeliveryChange = (deliveryId: string) => {
+    const delivery = deliveries.find((d: any) => d.id === deliveryId);
+    if (delivery) {
+      const customerCredit = getCustomerCredit(delivery.customer_id);
+      setAddFormData(prev => ({
+        ...prev,
+        delivery_id: deliveryId,
+        credit_available: customerCredit
+      }));
+    }
+  };
+
+  // NEW: Handle customer change in add form to update credit
+  const handleAddCustomerChange = (customerId: string) => {
+    const customerCredit = getCustomerCredit(customerId);
+    setAddFormData(prev => ({
       ...prev,
       customer_id: customerId,
-      credit_available: credit
+      credit_available: customerCredit
     }));
   };
 
@@ -198,7 +222,7 @@ export function PaymentsSection() {
     method: 100,
     code: 100,
     status: 100,
-    actions: 120
+    actions: 140 // Increased for two buttons
   });
 
   // NEW: Resizing state
@@ -225,7 +249,8 @@ export function PaymentsSection() {
             delivery_items (
               product_name,
               quantity
-            )
+            ),
+            customers (customer_name)
           )
         `)
         .gte("created_at", monthStart.toISOString().split('T')[0])
@@ -374,143 +399,23 @@ export function PaymentsSection() {
     return "bg-gray-500/10 text-gray-500";
   };
 
-  // NEW: Create payment mutation - adds to existing payments for the same delivery
-  const createPaymentMutation = useMutation({
-    mutationFn: async (paymentData: any) => {
-      // Use only status values that are allowed by the constraint
-      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed', 'credit'];
-      
-      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
-      const totalPaid = calculateTotalPaid(paymentData.delivery_id);
-      const deliveryTotal = Number(delivery?.total_amount || 0);
-      
-      // Calculate new total (existing + new + credit if used)
-      let newTotalPaid = totalPaid;
-      let creditToApply = 0;
-      
-      if (paymentData.use_credit && paymentData.credit_available > 0) {
-        creditToApply = Math.min(paymentData.credit_available, paymentData.new_payment_amount);
-        newTotalPaid += creditToApply;
-      }
-      
-      newTotalPaid += Number(paymentData.new_payment_amount || 0) - creditToApply;
-      
-      let finalStatusCalculated = 'pending';
-      if (newTotalPaid >= deliveryTotal) {
-        finalStatusCalculated = 'paid';
-      } else if (newTotalPaid === 0) {
-        finalStatusCalculated = 'pending';
-      } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
-      }
-      
-      // Create the payment record - use today's date for due_date
-      const { data: payment, error: paymentError } = await supabase
-        .from('payments')
-        .insert([{
-          customer_id: paymentData.customer_id,
-          delivery_id: paymentData.delivery_id,
-          amount: paymentData.new_payment_amount, // This is the NEW amount to add
-          due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
-          payment_method: paymentData.payment_method,
-          mpesa_code: paymentData.mpesa_code,
-          status: finalStatusCalculated
-        }])
-        .select()
-        .single();
-
-      if (paymentError) throw paymentError;
-      
-      // Check if there's overpayment that should become credit
-      if (newTotalPaid > deliveryTotal) {
-        const overpayment = newTotalPaid - deliveryTotal;
-        const finalCreditAmount = overpayment + creditToApply;
-        
-        // First, delete any existing credit for this customer (to avoid duplicates)
-        await supabase
-          .from('payments')
-          .delete()
-          .eq('customer_id', paymentData.customer_id)
-          .eq('status', 'credit');
-        
-        // Then create new credit
-        await supabase
-          .from('payments')
-          .insert([{
-            customer_id: paymentData.customer_id,
-            amount: finalCreditAmount,
-            due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
-            payment_method: paymentData.payment_method,
-            status: 'credit'
-          }]);
-      }
-      
-      // Update delivery payment status
-      await supabase
-        .from('deliveries')
-        .update({ payment_status: finalStatusCalculated })
-        .eq('id', paymentData.delivery_id);
-
-      return payment;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payments"] });
-      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
-      toast({
-        title: "Payment created",
-        description: "Payment has been created successfully.",
-      });
-      setIsFormOpen(false);
-      setEditingPayment(null);
-      setFormData({
-        id: '',
-        customer_id: '',
-        delivery_id: '',
-        existing_paid_amount: 0,
-        new_payment_amount: 0,
-        credit_available: 0,
-        use_credit: false,
-        payment_method: 'cash',
-        mpesa_code: ''
-      });
-    },
-    onError: (error: any) => {
-      console.error('Create error:', error);
-      toast({
-        title: "Error",
-        description: `Failed to create payment: ${error.message || 'Unknown error'}`,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // NEW: Update payment mutation - adds to existing payment (NOT REPLACES)
+  // NEW: Update payment mutation - modifies existing payment record
   const updatePaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Use only status values that are allowed by the constraint
-      const allowedStatuses = ['pending', 'paid', 'overdue', 'pending_verification', 'rejected', 'failed', 'completed', 'credit'];
-      
-      // Get current total paid for this delivery (excluding this payment if updating)
-      const existingPayments = payments?.filter((p: any) => 
-        p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id
-      ) || [];
-      const existingTotalPaid = existingPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-      
-      // Calculate new total (existing + new + credit if used)
-      let newTotalPaid = existingTotalPaid;
-      let creditToApply = 0;
-      
-      if (paymentData.use_credit && paymentData.credit_available > 0) {
-        creditToApply = Math.min(paymentData.credit_available, paymentData.new_payment_amount);
-        newTotalPaid += creditToApply;
-      }
-      
-      newTotalPaid += Number(paymentData.new_payment_amount || 0) - creditToApply;
-      
+      // Calculate new total for delivery after updating this payment
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
       
-      // Determine status based on new total
+      // Get all payments for this delivery except the one being updated
+      const otherPayments = payments?.filter((p: any) => 
+        p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id
+      ) || [];
+      const otherTotal = otherPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+      
+      // New total after this payment update
+      const newTotalPaid = otherTotal + Number(paymentData.amount || 0);
+      
+      // Determine new status based on total
       let finalStatusCalculated = 'pending';
       if (newTotalPaid >= deliveryTotal) {
         finalStatusCalculated = 'paid';
@@ -520,18 +425,16 @@ export function PaymentsSection() {
         finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
       }
       
-      // Create the payment record (this ADDS to existing payments, doesn't replace)
+      // Update the existing payment record
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
-        .insert([{
-          customer_id: paymentData.customer_id,
-          delivery_id: paymentData.delivery_id,
-          amount: paymentData.new_payment_amount, // This is the NEW amount to add
-          due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
+        .update({
+          amount: paymentData.amount,
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
           status: finalStatusCalculated
-        }])
+        })
+        .eq('id', paymentData.id)
         .select()
         .single();
 
@@ -540,7 +443,6 @@ export function PaymentsSection() {
       // Check if there's overpayment that should become credit
       if (newTotalPaid > deliveryTotal) {
         const overpayment = newTotalPaid - deliveryTotal;
-        const finalCreditAmount = overpayment + creditToApply;
         
         // First, delete any existing credit for this customer (to avoid duplicates)
         await supabase
@@ -554,7 +456,7 @@ export function PaymentsSection() {
           .from('payments')
           .insert([{
             customer_id: paymentData.customer_id,
-            amount: finalCreditAmount,
+            amount: overpayment,
             due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
             payment_method: paymentData.payment_method,
             status: 'credit'
@@ -576,18 +478,16 @@ export function PaymentsSection() {
         title: "Payment updated",
         description: "Payment has been updated successfully.",
       });
-      setIsFormOpen(false);
+      setIsEditFormOpen(false);
       setEditingPayment(null);
-      setFormData({
+      setEditFormData({
         id: '',
         customer_id: '',
         delivery_id: '',
-        existing_paid_amount: 0,
-        new_payment_amount: 0,
-        credit_available: 0,
-        use_credit: false,
+        amount: 0,
         payment_method: 'cash',
-        mpesa_code: ''
+        mpesa_code: '',
+        status: 'pending'
       });
     },
     onError: (error: any) => {
@@ -595,6 +495,119 @@ export function PaymentsSection() {
       toast({
         title: "Error",
         description: `Failed to update payment: ${error.message || 'Unknown error'}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // NEW: Add payment mutation - creates new payment record for same delivery
+  const addPaymentMutation = useMutation({
+    mutationFn: async (paymentData: any) => {
+      // Calculate new total for delivery after adding this payment
+      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
+      const deliveryTotal = Number(delivery?.total_amount || 0);
+      
+      // Get all current payments for this delivery
+      const currentPayments = payments?.filter((p: any) => 
+        p.delivery_id === paymentData.delivery_id
+      ) || [];
+      const currentTotal = currentPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+      
+      // Calculate new total after adding this payment
+      let newTotalPaid = currentTotal;
+      let creditToApply = 0;
+      
+      if (paymentData.use_credit && paymentData.credit_available > 0) {
+        creditToApply = Math.min(paymentData.credit_available, paymentData.amount);
+        newTotalPaid += creditToApply;
+      }
+      
+      newTotalPaid += Number(paymentData.amount || 0) - creditToApply;
+      
+      // Determine status based on new total
+      let finalStatusCalculated = 'pending';
+      if (newTotalPaid >= deliveryTotal) {
+        finalStatusCalculated = 'paid';
+      } else if (newTotalPaid === 0) {
+        finalStatusCalculated = 'pending';
+      } else if (newTotalPaid < deliveryTotal) {
+        finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
+      }
+      
+      // Create the new payment record
+      const { data: payment, error: paymentError } = await supabase
+        .from('payments')
+        .insert([{
+          customer_id: paymentData.customer_id,
+          delivery_id: paymentData.delivery_id,
+          amount: paymentData.amount, // This is the NEW amount to add
+          due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
+          payment_method: paymentData.payment_method,
+          mpesa_code: paymentData.mpesa_code,
+          status: finalStatusCalculated
+        }])
+        .select()
+        .single();
+
+      if (paymentError) throw paymentError;
+      
+      // Check if there's overpayment that should become credit
+      if (newTotalPaid > deliveryTotal) {
+        const overpayment = newTotalPaid - deliveryTotal;
+        const finalCreditAmount = overpayment + creditToApply;
+        
+        // First, delete any existing credit for this customer (to avoid duplicates)
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('customer_id', paymentData.customer_id)
+          .eq('status', 'credit');
+        
+        // Then create new credit
+        await supabase
+          .from('payments')
+          .insert([{
+            customer_id: paymentData.customer_id,
+            amount: finalCreditAmount,
+            due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
+            payment_method: paymentData.payment_method,
+            status: 'credit'
+          }]);
+      }
+      
+      // Update delivery payment status
+      await supabase
+        .from('deliveries')
+        .update({ payment_status: finalStatusCalculated })
+        .eq('id', paymentData.delivery_id);
+
+      return payment;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      toast({
+        title: "Payment added",
+        description: "New payment has been added successfully.",
+      });
+      setIsAddFormOpen(false);
+      setAddingPayment(null);
+      setAddFormData({
+        customer_id: '',
+        delivery_id: '',
+        amount: 0,
+        credit_available: 0,
+        use_credit: false,
+        payment_method: 'cash',
+        mpesa_code: '',
+        status: 'pending'
+      });
+    },
+    onError: (error: any) => {
+      console.error('Add error:', error);
+      toast({
+        title: "Error",
+        description: `Failed to add payment: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
     },
@@ -627,24 +640,35 @@ export function PaymentsSection() {
   });
 
   const handleEdit = (payment: any) => {
-    const deliveryId = payment.delivery_id;
-    const totalPaid = calculateTotalPaid(deliveryId);
-    const customerCredit = getCustomerCredit(payment.customer_id);
-    
-    // Populate form data with payment details
-    setFormData({
+    // Populate edit form data with payment details
+    setEditFormData({
       id: payment.id,
       customer_id: payment.customer_id || '',
       delivery_id: payment.delivery_id || '',
-      existing_paid_amount: totalPaid, // Show total paid so far
-      new_payment_amount: 0, // Start with 0 for new payment
-      credit_available: customerCredit, // Show available credit
-      use_credit: customerCredit > 0, // Auto-enable if credit available
+      amount: payment.amount || 0,
       payment_method: payment.payment_method || 'cash',
-      mpesa_code: payment.mpesa_code || ''
+      mpesa_code: payment.mpesa_code || '',
+      status: payment.status || 'pending'
     });
     setEditingPayment(payment);
-    setIsFormOpen(true);
+    setIsEditFormOpen(true);
+  };
+
+  const handleAddPayment = (payment: any) => {
+    const customerCredit = getCustomerCredit(payment.customer_id);
+    // Populate add form data with delivery info
+    setAddFormData({
+      customer_id: payment.customer_id || '',
+      delivery_id: payment.delivery_id || '',
+      amount: 0, // Start with 0 for new payment
+      credit_available: customerCredit, // Show available credit
+      use_credit: customerCredit > 0, // Auto-enable if credit available
+      payment_method: 'cash',
+      mpesa_code: '',
+      status: 'pending'
+    });
+    setAddingPayment(payment);
+    setIsAddFormOpen(true);
   };
 
   const handleDelete = (id: string) => {
@@ -658,16 +682,23 @@ export function PaymentsSection() {
     }
   };
 
-  // NEW: Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  // NEW: Handle edit form submission
+  const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingPayment && formData.id) {
-      // Update existing payment (this ADDS to existing total, doesn't replace)
-      updatePaymentMutation.mutate(formData);
-    } else {
-      // Create new payment (this ADDS to existing payments for the same delivery)
-      createPaymentMutation.mutate(formData);
+    if (editingPayment && editFormData.id) {
+      // Update existing payment (modifies specific record)
+      updatePaymentMutation.mutate(editFormData);
+    }
+  };
+
+  // NEW: Handle add form submission
+  const handleAddSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (addingPayment) {
+      // Add new payment to delivery (creates new record)
+      addPaymentMutation.mutate(addFormData);
     }
   };
 
@@ -691,22 +722,21 @@ export function PaymentsSection() {
             Import
           </Button>
           <Button className="bg-gradient-primary" size="sm" onClick={() => {
-            setEditingPayment(null);
-            setFormData({
-              id: '',
+            setAddingPayment(null);
+            setAddFormData({
               customer_id: '',
               delivery_id: '',
-              existing_paid_amount: 0,
-              new_payment_amount: 0,
+              amount: 0,
               credit_available: 0,
               use_credit: false,
               payment_method: 'cash',
-              mpesa_code: ''
+              mpesa_code: '',
+              status: 'pending'
             });
-            setIsFormOpen(true);
+            setIsAddFormOpen(true);
           }}>
             <Plus className="w-3 h-3 mr-1" />
-            New
+            Add Payment
           </Button>
         </div>
       </div>
@@ -1195,6 +1225,14 @@ export function PaymentsSection() {
                                   <Button 
                                     variant="ghost" 
                                     size="sm" 
+                                    onClick={() => handleAddPayment(payment)}
+                                    className="z-[3000]"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
                                     onClick={() => handleDelete(payment.id)}
                                     className="z-[3000]"
                                   >
@@ -1215,18 +1253,18 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - WITH CREDIT SYSTEM */}
-      {isFormOpen && (
+      {/* EDIT PAYMENT MODAL - FOR MODIFYING EXISTING PAYMENT */}
+      {isEditFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">
-                  {editingPayment ? "Edit Payment" : "Create New Payment"}
+                  Edit Payment
                 </h3>
                 <button 
                   onClick={() => {
-                    setIsFormOpen(false);
+                    setIsEditFormOpen(false);
                     setEditingPayment(null);
                   }}
                   className="text-gray-500 hover:text-gray-700"
@@ -1238,17 +1276,17 @@ export function PaymentsSection() {
               {loadingData ? (
                 <div className="text-center py-8">Loading data...</div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleEditSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-1">Customer *</label>
                       <select
                         name="customer_id"
-                        value={formData.customer_id}
-                        onChange={(e) => handleCustomerChange(e.target.value)}
+                        value={editFormData.customer_id}
+                        onChange={(e) => setEditFormData(prev => ({...prev, customer_id: e.target.value}))}
                         required
                         className="w-full p-2 border rounded"
-                        disabled={!!editingPayment} // Disable customer selection when editing
+                        disabled={true} // Disable during edit
                       >
                         <option value="">Select Customer</option>
                         {customers.map(customer => (
@@ -1258,90 +1296,34 @@ export function PaymentsSection() {
                         ))}
                       </select>
                     </div>
-                    {!editingPayment && (
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Delivery</label>
-                        <select
-                          name="delivery_id"
-                          value={formData.delivery_id}
-                          onChange={(e) => handleDeliveryChange(e.target.value)}
-                          className="w-full p-2 border rounded"
-                        >
-                          <option value="">Select Delivery</option>
-                          {deliveries.filter(d => d.customer_id === formData.customer_id).map(delivery => {
-                            const totalPaid = calculateTotalPaid(delivery.id);
-                            const balance = delivery.total_amount - totalPaid;
-                            const paymentCount = getDeliveryPayments(delivery.id).length;
-                            return (
-                              <option key={delivery.id} value={delivery.id}>
-                                {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()} ({paymentCount} payment{paymentCount !== 1 ? 's' : ''})
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                    )}
-                    {editingPayment && (
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Delivery</label>
-                        <input
-                          type="text"
-                          value={deliveries.find(d => d.id === formData.delivery_id)?.delivery_note_no || "Unknown"}
-                          readOnly
-                          className="w-full p-2 border rounded bg-gray-100"
-                        />
-                      </div>
-                    )}
                     <div>
-                      <label className="block text-sm font-medium mb-1">Current Amount Paid</label>
+                      <label className="block text-sm font-medium mb-1">Delivery</label>
                       <input
-                        type="number"
-                        value={formData.existing_paid_amount}
+                        type="text"
+                        value={deliveries.find(d => d.id === editFormData.delivery_id)?.delivery_note_no || "Unknown"}
                         readOnly
                         className="w-full p-2 border rounded bg-gray-100"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Amount to Add *</label>
+                      <label className="block text-sm font-medium mb-1">New Amount *</label>
                       <input
                         type="number"
-                        name="new_payment_amount"
-                        value={formData.new_payment_amount || ''}
-                        onChange={handleInputChange}
+                        name="amount"
+                        value={editFormData.amount}
+                        onChange={handleEditInputChange}
                         min="0"
                         required
                         className="w-full p-2 border rounded"
-                        placeholder="Enter amount to add"
+                        placeholder="Enter new payment amount"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Available Credit</label>
-                      <input
-                        type="number"
-                        value={formData.credit_available}
-                        readOnly
-                        className="w-full p-2 border rounded bg-gray-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Use Credit?</label>
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="use_credit"
-                          checked={formData.use_credit}
-                          onChange={handleInputChange}
-                          className="mr-2"
-                        />
-                        <span>Apply credit to this payment</span>
-                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Payment Mode</label>
                       <select
                         name="payment_method"
-                        value={formData.payment_method}
-                        onChange={handleInputChange}
+                        value={editFormData.payment_method}
+                        onChange={handleEditInputChange}
                         className="w-full p-2 border rounded"
                       >
                         <option value="cash">Cash</option>
@@ -1353,10 +1335,27 @@ export function PaymentsSection() {
                       <input
                         type="text"
                         name="mpesa_code"
-                        value={formData.mpesa_code}
-                        onChange={handleInputChange}
+                        value={editFormData.mpesa_code}
+                        onChange={handleEditInputChange}
                         className="w-full p-2 border rounded"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Status</label>
+                      <select
+                        name="status"
+                        value={editFormData.status}
+                        onChange={handleEditInputChange}
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="pending_verification">Pending Verification</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="failed">Failed</option>
+                        <option value="completed">Completed</option>
+                      </select>
                     </div>
                   </div>
 
@@ -1365,7 +1364,7 @@ export function PaymentsSection() {
                       type="button"
                       variant="outline" 
                       onClick={() => {
-                        setIsFormOpen(false);
+                        setIsEditFormOpen(false);
                         setEditingPayment(null);
                       }}
                     >
@@ -1374,11 +1373,176 @@ export function PaymentsSection() {
                     <Button 
                       type="submit"
                       className="bg-blue-600 hover:bg-blue-700"
-                      disabled={updatePaymentMutation.isPending || createPaymentMutation.isPending}
+                      disabled={updatePaymentMutation.isPending}
                     >
-                      {updatePaymentMutation.isPending || createPaymentMutation.isPending 
-                        ? (editingPayment ? 'Updating...' : 'Creating...') 
-                        : editingPayment ? 'Add Payment' : 'Create Payment'}
+                      {updatePaymentMutation.isPending ? 'Updating...' : 'Update Payment'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD PAYMENT MODAL - FOR CREATING NEW PAYMENT FOR SAME DELIVERY */}
+      {isAddFormOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">
+                  Add New Payment
+                </h3>
+                <button 
+                  onClick={() => {
+                    setIsAddFormOpen(false);
+                    setAddingPayment(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {loadingData ? (
+                <div className="text-center py-8">Loading data...</div>
+              ) : (
+                <form onSubmit={handleAddSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Customer *</label>
+                      <select
+                        name="customer_id"
+                        value={addFormData.customer_id}
+                        onChange={(e) => handleAddCustomerChange(e.target.value)}
+                        required
+                        className="w-full p-2 border rounded"
+                        disabled={!!addingPayment} // Disable if pre-filled
+                      >
+                        <option value="">Select Customer</option>
+                        {customers.map(customer => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.customer_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Delivery</label>
+                      <select
+                        name="delivery_id"
+                        value={addFormData.delivery_id}
+                        onChange={(e) => handleAddDeliveryChange(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        disabled={!!addingPayment} // Disable if pre-filled
+                      >
+                        <option value="">Select Delivery</option>
+                        {deliveries.filter(d => d.customer_id === addFormData.customer_id).map(delivery => {
+                          const totalPaid = calculateTotalPaid(delivery.id);
+                          const balance = delivery.total_amount - totalPaid;
+                          const paymentCount = getDeliveryPayments(delivery.id).length;
+                          return (
+                            <option key={delivery.id} value={delivery.id}>
+                              {delivery.delivery_note_no} - Total: KSh {Number(delivery.total_amount).toLocaleString()}, Paid: KSh {Number(totalPaid).toLocaleString()}, Balance: KSh {Number(balance).toLocaleString()} ({paymentCount} payment{paymentCount !== 1 ? 's' : ''})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Amount to Add *</label>
+                      <input
+                        type="number"
+                        name="amount"
+                        value={addFormData.amount}
+                        onChange={handleAddInputChange}
+                        min="0"
+                        required
+                        className="w-full p-2 border rounded"
+                        placeholder="Enter payment amount"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Available Credit</label>
+                      <input
+                        type="number"
+                        value={addFormData.credit_available}
+                        readOnly
+                        className="w-full p-2 border rounded bg-gray-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Use Credit?</label>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          name="use_credit"
+                          checked={addFormData.use_credit}
+                          onChange={handleAddInputChange}
+                          className="mr-2"
+                        />
+                        <span>Apply credit to this payment</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Payment Mode</label>
+                      <select
+                        name="payment_method"
+                        value={addFormData.payment_method}
+                        onChange={handleAddInputChange}
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="mpesa">M-Pesa</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">M-Pesa Code</label>
+                      <input
+                        type="text"
+                        name="mpesa_code"
+                        value={addFormData.mpesa_code}
+                        onChange={handleAddInputChange}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Status</label>
+                      <select
+                        name="status"
+                        value={addFormData.status}
+                        onChange={handleAddInputChange}
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="pending_verification">Pending Verification</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="failed">Failed</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      onClick={() => {
+                        setIsAddFormOpen(false);
+                        setAddingPayment(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      disabled={addPaymentMutation.isPending}
+                    >
+                      {addPaymentMutation.isPending ? 'Adding...' : 'Add Payment'}
                     </Button>
                   </div>
                 </form>
