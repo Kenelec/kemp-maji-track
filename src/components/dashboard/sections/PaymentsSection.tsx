@@ -487,7 +487,7 @@ export function PaymentsSection() {
     },
   });
 
-  // NEW: Add payment mutation - creates new payment record for same delivery
+  // NEW: Add payment mutation - creates ONLY ONE payment record for same delivery
   const addPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
       // Validate that delivery_id is provided
@@ -495,7 +495,7 @@ export function PaymentsSection() {
         throw new Error('Please select a delivery');
       }
       
-      // Create the new payment record - let your system handle overpayment logic
+      // Create ONLY ONE payment record - let your system handle overpayment logic
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
@@ -638,7 +638,7 @@ export function PaymentsSection() {
     e.preventDefault();
     
     if (addingPayment) {
-      // Add new payment to delivery (creates new record)
+      // Add new payment to delivery (creates ONLY ONE record)
       addPaymentMutation.mutate(addFormData);
     }
   };
