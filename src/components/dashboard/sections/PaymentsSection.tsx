@@ -77,7 +77,7 @@ export function PaymentsSection() {
             delivery_date,
             total_amount,
             payment_status,
-            customers (customer_name)
+            customer_id
           `),
           supabase.from('payments').select(`
             id,
@@ -490,6 +490,11 @@ export function PaymentsSection() {
   // NEW: Add payment mutation - creates new payment record for same delivery
   const addPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
+      // Validate that delivery_id is provided
+      if (!paymentData.delivery_id) {
+        throw new Error('Please select a delivery');
+      }
+      
       // Create the new payment record - let your system handle overpayment logic
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
