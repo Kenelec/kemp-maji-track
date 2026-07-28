@@ -119,7 +119,7 @@ export function PaymentsSection() {
     loadData();
   }, [toast]);
 
-  // NEW: Calculate total paid for a delivery
+  // NEW: Calculate total paid for a delivery (excluding credit records)
   const calculateTotalPaid = (deliveryId: string) => {
     if (!payments) return 0;
     
@@ -127,7 +127,7 @@ export function PaymentsSection() {
     return deliveryPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
   };
 
-  // NEW: Get all payments for a delivery (for history)
+  // NEW: Get all payments for a delivery (for history, excluding credit records)
   const getDeliveryPayments = (deliveryId: string) => {
     if (!payments) return [];
     
@@ -406,9 +406,9 @@ export function PaymentsSection() {
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
       
-      // Get all payments for this delivery except the one being updated
+      // Get all payments for this delivery except the one being updated (excluding credit)
       const otherPayments = payments?.filter((p: any) => 
-        p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id
+        p.delivery_id === paymentData.delivery_id && p.id !== paymentData.id && p.status !== 'credit'
       ) || [];
       const otherTotal = otherPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
       
@@ -439,30 +439,6 @@ export function PaymentsSection() {
         .single();
 
       if (paymentError) throw paymentError;
-      
-      // Check if there's overpayment that should become credit
-      if (newTotalPaid > deliveryTotal) {
-        const overpayment = newTotalPaid - deliveryTotal;
-        
-        // First, delete any existing credit for this customer (to avoid duplicates)
-        await supabase
-          .from('payments')
-          .delete()
-          .eq('customer_id', paymentData.customer_id)
-          .eq('status', 'credit');
-        
-        // Then create new credit
-        await supabase
-          .from('payments')
-          .insert([{
-            customer_id: paymentData.customer_id,
-            amount: overpayment,
-            due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
-            payment_method: paymentData.payment_method,
-            status: 'credit',
-            delivery_id: paymentData.delivery_id // Link to same delivery
-          }]);
-      }
       
       // Update delivery payment status
       await supabase
@@ -504,38 +480,7 @@ export function PaymentsSection() {
   // NEW: Add payment mutation - creates new payment record for same delivery
   const addPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Calculate new total for delivery after adding this payment
-      const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
-      const deliveryTotal = Number(delivery?.total_amount || 0);
-      
-      // Get all current payments for this delivery (excluding credit)
-      const currentPayments = payments?.filter((p: any) => 
-        p.delivery_id === paymentData.delivery_id && p.status !== 'credit'
-      ) || [];
-      const currentTotal = currentPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-      
-      // Calculate new total after adding this payment
-      let newTotalPaid = currentTotal;
-      let creditToApply = 0;
-      
-      if (paymentData.use_credit && paymentData.credit_available > 0) {
-        creditToApply = Math.min(paymentData.credit_available, paymentData.amount);
-        newTotalPaid += creditToApply;
-      }
-      
-      newTotalPaid += Number(paymentData.amount || 0) - creditToApply;
-      
-      // Determine status based on new total
-      let finalStatusCalculated = 'pending';
-      if (newTotalPaid >= deliveryTotal) {
-        finalStatusCalculated = 'paid';
-      } else if (newTotalPaid === 0) {
-        finalStatusCalculated = 'pending';
-      } else if (newTotalPaid < deliveryTotal) {
-        finalStatusCalculated = 'pending'; // Use 'pending' instead of 'partial'
-      }
-      
-      // Create the new payment record
+      // Create the new payment record - let your system handle overpayment logic
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert([{
@@ -545,43 +490,12 @@ export function PaymentsSection() {
           due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
           payment_method: paymentData.payment_method,
           mpesa_code: paymentData.mpesa_code,
-          status: finalStatusCalculated
+          status: 'pending' // Will be updated by your system's overpayment logic
         }])
         .select()
         .single();
 
       if (paymentError) throw paymentError;
-      
-      // Check if there's overpayment that should become credit
-      if (newTotalPaid > deliveryTotal) {
-        const overpayment = newTotalPaid - deliveryTotal;
-        const finalCreditAmount = overpayment + creditToApply;
-        
-        // First, delete any existing credit for this customer (to avoid duplicates)
-        await supabase
-          .from('payments')
-          .delete()
-          .eq('customer_id', paymentData.customer_id)
-          .eq('status', 'credit');
-        
-        // Then create new credit
-        await supabase
-          .from('payments')
-          .insert([{
-            customer_id: paymentData.customer_id,
-            amount: finalCreditAmount,
-            due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
-            payment_method: paymentData.payment_method,
-            status: 'credit',
-            delivery_id: paymentData.delivery_id // Link to same delivery
-          }]);
-      }
-      
-      // Update delivery payment status
-      await supabase
-        .from('deliveries')
-        .update({ payment_status: finalStatusCalculated })
-        .eq('id', paymentData.delivery_id);
 
       return payment;
     },
@@ -642,6 +556,16 @@ export function PaymentsSection() {
   });
 
   const handleEdit = (payment: any) => {
+    // Only allow editing non-credit payments
+    if (payment.status === 'credit') {
+      toast({
+        title: "Cannot Edit",
+        description: "Credit records cannot be edited.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Populate edit form data with payment details
     setEditFormData({
       id: payment.id,
@@ -1080,6 +1004,11 @@ export function PaymentsSection() {
                   <Table className="min-w-max">
                     <TableBody>
                       {sortedPayments.map((payment) => {
+                        // Skip credit records that are auto-generated by your system
+                        if (payment.payment_method && payment.payment_method.startsWith('OVERPAY:')) {
+                          return null; // Skip these records as they're auto-generated
+                        }
+                        
                         const deliveryTotal = payment.deliveries?.total_amount || 0;
                         const totalPaid = calculateTotalPaid(payment.delivery_id);
                         const balance = deliveryTotal - totalPaid;
@@ -1333,7 +1262,6 @@ export function PaymentsSection() {
                         <option value="card">Card</option>
                         <option value="bank">Bank</option>
                         <option value="other">Other</option>
-                        <option value="credit">Credit</option>
                       </select>
                     </div>
                     <div>
