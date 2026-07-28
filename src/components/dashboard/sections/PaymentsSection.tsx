@@ -459,7 +459,8 @@ export function PaymentsSection() {
             amount: overpayment,
             due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
             payment_method: paymentData.payment_method,
-            status: 'credit'
+            status: 'credit',
+            delivery_id: paymentData.delivery_id // Link to same delivery
           }]);
       }
       
@@ -507,9 +508,9 @@ export function PaymentsSection() {
       const delivery = deliveries.find((d: any) => d.id === paymentData.delivery_id);
       const deliveryTotal = Number(delivery?.total_amount || 0);
       
-      // Get all current payments for this delivery
+      // Get all current payments for this delivery (excluding credit)
       const currentPayments = payments?.filter((p: any) => 
-        p.delivery_id === paymentData.delivery_id
+        p.delivery_id === paymentData.delivery_id && p.status !== 'credit'
       ) || [];
       const currentTotal = currentPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
       
@@ -571,7 +572,8 @@ export function PaymentsSection() {
             amount: finalCreditAmount,
             due_date: new Date().toISOString().split('T')[0], // Use today's date to satisfy not-null constraint
             payment_method: paymentData.payment_method,
-            status: 'credit'
+            status: 'credit',
+            delivery_id: paymentData.delivery_id // Link to same delivery
           }]);
       }
       
@@ -1328,6 +1330,10 @@ export function PaymentsSection() {
                       >
                         <option value="cash">Cash</option>
                         <option value="mpesa">M-Pesa</option>
+                        <option value="card">Card</option>
+                        <option value="bank">Bank</option>
+                        <option value="other">Other</option>
+                        <option value="credit">Credit</option>
                       </select>
                     </div>
                     <div>
@@ -1495,6 +1501,9 @@ export function PaymentsSection() {
                       >
                         <option value="cash">Cash</option>
                         <option value="mpesa">M-Pesa</option>
+                        <option value="card">Card</option>
+                        <option value="bank">Bank</option>
+                        <option value="other">Other</option>
                       </select>
                     </div>
                     <div>
