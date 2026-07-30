@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, CheckCircle, Pencil, Trash2, Upload, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { PaymentFormDialog } from "../forms/PaymentFormDialog"; // Assuming you have this
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import {
@@ -33,6 +32,115 @@ export function PaymentsSection() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   
+  // NEW: Form state for editing
+  const [formData, setFormData] = useState({
+    id: '',
+    delivery_id: '',
+    customer_id: '',
+    amount: 0,
+    payment_method: 'mpesa',
+    mpesa_code: '',
+    due_date: '',
+    status: 'pending',
+  });
+
+  // NEW: Loading states for dependent data
+  const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // NEW: Load dependent data
+  useEffect(() => {
+    const loadData = async () => {
+      setLoadingData(true);
+      try {
+        const [{ data: deliveriesData }, { data: customersData }] = await Promise.all([
+          supabase.from('deliveries').select('id, delivery_note_no, total_amount, delivery_date, customers(customer_name)'),
+          supabase.from('customers').select('id, customer_name')
+        ]);
+        
+        setDeliveries(deliveriesData || []);
+        setCustomers(customersData || []);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load required data",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingData(false);
+      }
+    };
+    
+    loadData();
+  }, [toast]);
+
+  // NEW: Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'amount' ? Number(value) : value
+    }));
+  };
+
+  // NEW: Handle delivery selection change
+  const handleDeliveryChange = (deliveryId: string) => {
+    const selectedDelivery = deliveries.find(d => d.id === deliveryId);
+    if (selectedDelivery) {
+      setFormData(prev => ({
+        ...prev,
+        delivery_id: deliveryId,
+        customer_id: selectedDelivery.customer_id,
+        amount: selectedDelivery.total_amount,
+        due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 7 days from now
+      }));
+    }
+  };
+
+  // NEW: Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      if (editingPayment) {
+        // Update existing payment
+        const { error } = await supabase
+          .from('payments')
+          .update(formData)
+          .eq('id', editingPayment.id);
+        
+        if (error) throw error;
+        toast({
+          title: "Payment updated",
+          description: "Payment has been updated successfully.",
+        });
+      } else {
+        // Create new payment
+        const { error } = await supabase
+          .from('payments')
+          .insert([formData]);
+        
+        if (error) throw error;
+        toast({
+          title: "Payment created",
+          description: "Payment has been created successfully.",
+        });
+      }
+      
+      setIsFormOpen(false);
+      setEditingPayment(null);
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save payment",
+        variant: "destructive",
+      });
+    }
+  };
+
   // NEW: Monthly navigation state
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   
@@ -251,6 +359,17 @@ export function PaymentsSection() {
   });
 
   const handleEdit = (payment: any) => {
+    // Populate form data with payment details
+    setFormData({
+      id: payment.id,
+      delivery_id: payment.delivery_id || '',
+      customer_id: payment.customer_id || '',
+      amount: payment.amount || 0,
+      payment_method: payment.payment_method || 'mpesa',
+      mpesa_code: payment.mpesa_code || '',
+      due_date: payment.due_date || new Date().toISOString().split('T')[0],
+      status: payment.status || 'pending',
+    });
     setEditingPayment(payment);
     setIsFormOpen(true);
   };
@@ -376,7 +495,20 @@ export function PaymentsSection() {
             <Upload className="w-3 h-3 mr-1" />
             Import
           </Button>
-          <Button className="bg-gradient-primary" size="sm" onClick={() => setIsFormOpen(true)}>
+          <Button className="bg-gradient-primary" size="sm" onClick={() => {
+            setEditingPayment(null);
+            setFormData({
+              id: '',
+              delivery_id: '',
+              customer_id: '',
+              amount: 0,
+              payment_method: 'mpesa',
+              mpesa_code: '',
+              due_date: new Date().toISOString().split('T')[0],
+              status: 'pending',
+            });
+            setIsFormOpen(true);
+          }}>
             <Plus className="w-3 h-3 mr-1" />
             Add
           </Button>
@@ -430,7 +562,7 @@ export function PaymentsSection() {
             >
               {/* COMPACT SCROLLABLE CONTAINER - SINGLE SCROLLBAR */}
               <div className="h-[calc(100vh-280px)] overflow-y-auto">
-                {/* FIXED HEADER */}
+                {/* FIXED HEADER - NO SCROLLBAR HERE */}
                 <div className="sticky top-0 z-[1000] bg-background border-b">
                   <Table className="min-w-max">
                     <TableHeader className="bg-background">
@@ -681,7 +813,7 @@ export function PaymentsSection() {
                   </Table>
                 </div>
                 
-                {/* DATA ROWS */}
+                {/* DATA ROWS - SCROLLABLE CONTENT */}
                 <div className="relative z-[500]">
                   <Table className="min-w-max">
                     <TableBody>
@@ -833,10 +965,10 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - COMPLETELY FIXED */}
+      {/* EDIT FORM MODAL - COMPLETELY FIXED WITH ACTUAL FORM */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
-          <div className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">
@@ -853,27 +985,109 @@ export function PaymentsSection() {
                 </button>
               </div>
               
-              {/* Payment form content goes here */}
-              <div className="text-center py-8 text-gray-500">
-                Payment form would go here
-              </div>
-              
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsFormOpen(false);
-                    setEditingPayment(null);
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {editingPayment ? 'Update Payment' : 'Create Payment'}
-                </Button>
-              </div>
+              {loadingData ? (
+                <div className="text-center py-8">Loading form data...</div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Delivery *</label>
+                      <select
+                        name="delivery_id"
+                        value={formData.delivery_id}
+                        onChange={(e) => handleDeliveryChange(e.target.value)}
+                        required
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="">Select Delivery</option>
+                        {deliveries.map(delivery => (
+                          <option key={delivery.id} value={delivery.id}>
+                            {delivery.delivery_note_no || delivery.id} - {delivery.customers?.customer_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Amount *</label>
+                      <input
+                        type="number"
+                        name="amount"
+                        value={formData.amount}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="0.01"
+                        required
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Payment Method</label>
+                      <select
+                        name="payment_method"
+                        value={formData.payment_method}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="mpesa">M-Pesa</option>
+                        <option value="cash">Cash</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">M-Pesa Code</label>
+                      <input
+                        type="text"
+                        name="mpesa_code"
+                        value={formData.mpesa_code}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Due Date</label>
+                      <input
+                        type="date"
+                        name="due_date"
+                        value={formData.due_date}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Status</label>
+                      <select
+                        name="status"
+                        value={formData.status}
+                        onChange={handleInputChange}
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                        <option value="overdue">Overdue</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      onClick={() => {
+                        setIsFormOpen(false);
+                        setEditingPayment(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit"
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {editingPayment ? 'Update Payment' : 'Create Payment'}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>
