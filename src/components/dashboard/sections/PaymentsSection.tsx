@@ -28,7 +28,6 @@ export function PaymentsSection() {
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false);
-  const [editingPayment, setEditingPayment] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   
@@ -142,7 +141,6 @@ export function PaymentsSection() {
       });
       
       setIsFormOpen(false);
-      setEditingPayment(null);
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["deliveries"] });
     } catch (error: any) {
@@ -449,7 +447,7 @@ export function PaymentsSection() {
   };
 
   const derivedStatusById = useMemo(() => {
-    const map = new Map<string, { type: 'paid' | 'pending' | 'credit' | 'partial'; label: string }>();
+    const map = new Map<string, { type: 'paid' | 'overdue' | 'credit' | 'partial'; label: string }>();
     if (!payments) return map;
 
     const groups = new Map<string, any[]>();
@@ -473,7 +471,7 @@ export function PaymentsSection() {
       arr.forEach((p: any) => {
         running += Number(p.amount || 0);
         const diff = running - deliveryTotal;
-        let type: 'paid' | 'pending' | 'credit' | 'partial';
+        let type: 'paid' | 'overdue' | 'credit' | 'partial';
         let label: string;
         
         if (deliveryTotal === 0) {
@@ -487,8 +485,8 @@ export function PaymentsSection() {
           } else if (p.status === 'paid') {
             type = 'paid';
             label = 'Paid';
-          } else if (p.status === 'overdue') {
-            type = 'pending';
+          } else if (p.status === 'overdue' || p.status === 'pending') {
+            type = 'overdue';
             label = 'Overdue';
           } else {
             type = 'paid';
@@ -527,8 +525,8 @@ export function PaymentsSection() {
             <Upload className="w-3 h-3 mr-1" />
             Import
           </Button>
+          {/* NEW: Add Payment Button */}
           <Button className="bg-gradient-primary" size="sm" onClick={() => {
-            setEditingPayment(null);
             setFormData({
               delivery_id: '',
               customer_id: '',
@@ -850,8 +848,8 @@ export function PaymentsSection() {
                     <TableBody>
                       {sortedPayments.map((payment) => {
                         const derived = derivedStatusById.get(payment.id);
-                        const type = derived?.type || payment.status;
-                        const label = derived?.label || payment.status;
+                        const type = derived?.type || (payment.status === 'pending' ? 'overdue' : payment.status);
+                        const label = derived?.label || (payment.status === 'pending' ? 'Overdue' : payment.status);
                         
                         return (
                           <TableRow key={payment.id} className="hover:bg-gray-50">
@@ -1003,7 +1001,6 @@ export function PaymentsSection() {
                 <button 
                   onClick={() => {
                     setIsFormOpen(false);
-                    setEditingPayment(null);
                   }}
                   className="text-gray-500 hover:text-gray-700"
                 >
@@ -1087,7 +1084,6 @@ export function PaymentsSection() {
                       variant="outline" 
                       onClick={() => {
                         setIsFormOpen(false);
-                        setEditingPayment(null);
                       }}
                     >
                       Cancel
