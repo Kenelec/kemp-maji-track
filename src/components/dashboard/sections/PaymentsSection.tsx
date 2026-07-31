@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle, Pencil, Trash2, Upload, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Plus, CheckCircle, Trash2, Upload, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { ExcelUploadDialog } from "../ExcelUploadDialog";
@@ -32,16 +32,15 @@ export function PaymentsSection() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   
-  // NEW: Form state for editing
+  // NEW: Form state for adding payment
   const [formData, setFormData] = useState({
-    id: '',
     delivery_id: '',
     customer_id: '',
     amount: 0,
     payment_method: 'mpesa',
     mpesa_code: '',
     due_date: '',
-    status: 'pending',
+    status: 'paid', // NEW: Default to paid
   });
 
   // NEW: Loading states for dependent data
@@ -55,7 +54,7 @@ export function PaymentsSection() {
       setLoadingData(true);
       try {
         const [{ data: deliveriesData }, { data: customersData }] = await Promise.all([
-          supabase.from('deliveries').select('id, delivery_note_no, total_amount, delivery_date, customers(customer_name)'),
+          supabase.from('deliveries').select('id, delivery_note_no, total_amount, delivery_date, customer_id'),
           supabase.from('customers').select('id, customer_name')
         ]);
         
@@ -104,34 +103,48 @@ export function PaymentsSection() {
     e.preventDefault();
     
     try {
-      if (editingPayment) {
-        // Update existing payment
-        const { error } = await supabase
-          .from('payments')
-          .update(formData)
-          .eq('id', editingPayment.id);
-        
-        if (error) throw error;
-        toast({
-          title: "Payment updated",
-          description: "Payment has been updated successfully.",
-        });
-      } else {
-        // Create new payment
-        const { error } = await supabase
-          .from('payments')
-          .insert([formData]);
-        
-        if (error) throw error;
-        toast({
-          title: "Payment created",
-          description: "Payment has been created successfully.",
-        });
+      // NEW: Calculate if there's a credit
+      const selectedDelivery = deliveries.find(d => d.id === formData.delivery_id);
+      const totalAmount = selectedDelivery?.total_amount || 0;
+      const amountPaid = formData.amount;
+      const creditAmount = Math.max(0, amountPaid - totalAmount);
+      
+      // NEW: Determine status based on payment
+      let status = 'paid';
+      if (creditAmount > 0) {
+        status = `credit ${creditAmount}`;
+      } else if (amountPaid < totalAmount) {
+        status = `partial ${totalAmount - amountPaid}`;
       }
+      
+      const paymentData = {
+        ...formData,
+        status: status,
+      };
+      
+      const { error } = await supabase
+        .from('payments')
+        .insert([paymentData]);
+      
+      if (error) throw error;
+      
+      // NEW: Update delivery payment status if fully paid
+      if (amountPaid >= totalAmount) {
+        await supabase
+          .from('deliveries')
+          .update({ payment_status: 'paid' })
+          .eq('id', formData.delivery_id);
+      }
+      
+      toast({
+        title: "Payment created",
+        description: "Payment has been created successfully.",
+      });
       
       setIsFormOpen(false);
       setEditingPayment(null);
       queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -240,8 +253,18 @@ export function PaymentsSection() {
           bValue = (b.mpesa_code || "").toLowerCase();
           break;
         case 'status':
-          aValue = (a.status || "").toLowerCase();
-          bValue = (b.status || "").toLowerCase();
+          // NEW: Sort by status with special handling for credit/partial
+          if (a.status.startsWith('credit')) aValue = 0;
+          else if (a.status.startsWith('partial')) aValue = 1;
+          else if (a.status === 'paid') aValue = 2;
+          else if (a.status === 'overdue') aValue = 3;
+          else aValue = 4;
+          
+          if (b.status.startsWith('credit')) bValue = 0;
+          else if (b.status.startsWith('partial')) bValue = 1;
+          else if (b.status === 'paid') bValue = 2;
+          else if (b.status === 'overdue') bValue = 3;
+          else bValue = 4;
           break;
         case 'created_at':
         default:
@@ -358,22 +381,6 @@ export function PaymentsSection() {
     },
   });
 
-  const handleEdit = (payment: any) => {
-    // Populate form data with payment details
-    setFormData({
-      id: payment.id,
-      delivery_id: payment.delivery_id || '',
-      customer_id: payment.customer_id || '',
-      amount: payment.amount || 0,
-      payment_method: payment.payment_method || 'mpesa',
-      mpesa_code: payment.mpesa_code || '',
-      due_date: payment.due_date || new Date().toISOString().split('T')[0],
-      status: payment.status || 'pending',
-    });
-    setEditingPayment(payment);
-    setIsFormOpen(true);
-  };
-
   const handleDelete = (id: string) => {
     setPaymentToDelete(id);
     setDeleteDialogOpen(true);
@@ -423,16 +430,26 @@ export function PaymentsSection() {
     },
   });
 
+  // NEW: Enhanced status color function with credit handling
   const getStatusColor = (status: string) => {
-    if (status.includes('credit')) return "bg-blue-500/10 text-blue-500";
-    if (status.includes('pending')) return "bg-yellow-500/10 text-yellow-500";
+    if (status.startsWith('credit')) return "bg-blue-500/10 text-blue-500";
+    if (status.startsWith('partial')) return "bg-yellow-500/10 text-yellow-500";
     if (status === 'paid') return "bg-green-500/10 text-green-500";
     if (status === 'overdue') return "bg-red-500/10 text-red-500";
     return "bg-gray-500/10 text-gray-500";
   };
 
+  // NEW: Enhanced status display function
+  const getStatusDisplay = (status: string) => {
+    if (status.startsWith('credit')) return status;
+    if (status.startsWith('partial')) return status;
+    if (status === 'paid') return 'Paid';
+    if (status === 'overdue') return 'Overdue';
+    return status;
+  };
+
   const derivedStatusById = useMemo(() => {
-    const map = new Map<string, { type: 'paid' | 'pending' | 'credit'; label: string }>();
+    const map = new Map<string, { type: 'paid' | 'pending' | 'credit' | 'partial'; label: string }>();
     if (!payments) return map;
 
     const groups = new Map<string, any[]>();
@@ -456,18 +473,33 @@ export function PaymentsSection() {
       arr.forEach((p: any) => {
         running += Number(p.amount || 0);
         const diff = running - deliveryTotal;
-        let type: 'paid' | 'pending' | 'credit';
+        let type: 'paid' | 'pending' | 'credit' | 'partial';
         let label: string;
+        
         if (deliveryTotal === 0) {
           // Fallback to stored status when no delivery is linked
-          type = (p.status === 'credit' || p.status === 'paid' || p.status === 'pending') ? p.status : 'paid';
-          label = type;
+          if (p.status.startsWith('credit')) {
+            type = 'credit';
+            label = p.status;
+          } else if (p.status.startsWith('partial')) {
+            type = 'partial';
+            label = p.status;
+          } else if (p.status === 'paid') {
+            type = 'paid';
+            label = 'Paid';
+          } else if (p.status === 'overdue') {
+            type = 'pending';
+            label = 'Overdue';
+          } else {
+            type = 'paid';
+            label = p.status;
+          }
         } else if (diff > 0) {
           type = 'credit';
-          label = `${Math.abs(diff)} credit`;
+          label = `credit ${Math.abs(diff)}`;
         } else if (diff < 0) {
-          type = 'pending';
-          label = `${Math.abs(diff)} pending`;
+          type = 'partial';
+          label = `partial ${Math.abs(diff)}`;
         } else {
           type = 'paid';
           label = 'paid';
@@ -498,19 +530,18 @@ export function PaymentsSection() {
           <Button className="bg-gradient-primary" size="sm" onClick={() => {
             setEditingPayment(null);
             setFormData({
-              id: '',
               delivery_id: '',
               customer_id: '',
               amount: 0,
               payment_method: 'mpesa',
               mpesa_code: '',
               due_date: new Date().toISOString().split('T')[0],
-              status: 'pending',
+              status: 'paid',
             });
             setIsFormOpen(true);
           }}>
             <Plus className="w-3 h-3 mr-1" />
-            Add
+            Add Payment
           </Button>
         </div>
       </div>
@@ -918,7 +949,7 @@ export function PaymentsSection() {
                               style={{ width: `${columnWidths.status}px` }}
                             >
                               <Badge className={getStatusColor(type)} variant="secondary">
-                                {label}
+                                {getStatusDisplay(label)}
                               </Badge>
                             </TableCell>
                             <TableCell 
@@ -926,8 +957,8 @@ export function PaymentsSection() {
                               style={{ width: `${columnWidths.actions}px` }}
                             >
                               <div className="flex justify-center gap-1">
-                                {/* Only show Mark Paid button for pending payments - MasterAdmin only */}
-                                {isMasterAdmin && payment.status === "pending" && !label.includes('pending') && (
+                                {/* Only show Mark Paid button for overdue payments - MasterAdmin only */}
+                                {isMasterAdmin && (payment.status === "overdue" || payment.status === "pending") && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -942,14 +973,9 @@ export function PaymentsSection() {
                                   </Button>
                                 )}
                                 {isMasterAdmin && (
-                                  <>
-                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleEdit(payment)}>
-                                      <Pencil className="w-3 h-3" />
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleDelete(payment.id)}>
-                                      <Trash2 className="w-3 h-3 text-destructive" />
-                                    </Button>
-                                  </>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleDelete(payment.id)}>
+                                    <Trash2 className="w-3 h-3 text-destructive" />
+                                  </Button>
                                 )}
                               </div>
                             </TableCell>
@@ -965,14 +991,14 @@ export function PaymentsSection() {
         </CardContent>
       </Card>
 
-      {/* EDIT FORM MODAL - COMPLETELY FIXED WITH ACTUAL FORM */}
+      {/* ADD PAYMENT FORM MODAL - COMPLETELY FIXED */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">
-                  {editingPayment ? "Edit Payment" : "Add New Payment"}
+                  Add New Payment
                 </h3>
                 <button 
                   onClick={() => {
@@ -1002,7 +1028,7 @@ export function PaymentsSection() {
                         <option value="">Select Delivery</option>
                         {deliveries.map(delivery => (
                           <option key={delivery.id} value={delivery.id}>
-                            {delivery.delivery_note_no || delivery.id} - {delivery.customers?.customer_name}
+                            {delivery.delivery_note_no || delivery.id} - {delivery.total_amount}
                           </option>
                         ))}
                       </select>
@@ -1053,19 +1079,6 @@ export function PaymentsSection() {
                         className="w-full p-2 border rounded"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Status</label>
-                      <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
-                        className="w-full p-2 border rounded"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="paid">Paid</option>
-                        <option value="overdue">Overdue</option>
-                      </select>
-                    </div>
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-4">
@@ -1083,7 +1096,7 @@ export function PaymentsSection() {
                       type="submit"
                       className="bg-blue-600 hover:bg-blue-700"
                     >
-                      {editingPayment ? 'Update Payment' : 'Create Payment'}
+                      Create Payment
                     </Button>
                   </div>
                 </form>
